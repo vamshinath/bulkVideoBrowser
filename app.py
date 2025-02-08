@@ -29,7 +29,7 @@ def get_videos(directory,sort_by):
             if os.path.splitext(file)[1].lower() in video_exts and file_path not in ok_videos:
                 file_size = os.path.getsize(file_path)  # Convert to MB
 
-                if sort_by =='resolution':
+                if sort_by =='resolution' or True:
                     try:
                         cap = cv2.VideoCapture(file_path)
                         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
