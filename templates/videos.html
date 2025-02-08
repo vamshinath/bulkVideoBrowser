@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Gallery</title>
+    <style>
+        .video-container {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(400px, 1fr)); /* 3 videos per row */
+            gap: 10px;
+        }
+        .file-size {
+        font-weight: bold;
+        margin-right: 10px;
+        }
+        .video-item {
+            text-align: center;
+            display: flex;
+            flex-direction: column; /* Stack buttons on top */
+            align-items: center;
+        }
+        .btn-group {
+            margin-bottom: 5px; /* Adds space between buttons and video */
+        }
+        video {
+        width: 100%;  /* Video takes full width of its container */
+        height: auto; /* Height adjusts to maintain aspect ratio */
+        border-radius: 8px;
+    }
+        .btn-group {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 5px;
+    }
+
+    .btn-group button {
+        padding: 8px 15px;
+        font-size: 14px;
+        border: none;
+        cursor: pointer;
+        border-radius: 5px;
+    }
+
+    .btn-ok {
+        background-color: green;
+        color: white;
+    }
+
+    .btn-delete {
+        background-color: red;
+        color: white;
+    }
+
+    .btn-group button:hover {
+        opacity: 0.8;
+    }
+    </style>
+</head>
+<body>
+    <h1>Video Gallery</h1>
+    <div class="video-container">
+        {% for video in videos %}
+<div class="video-item">
+    <div class="btn-group">
+        <span class="file-size">{{ video.size }} MB</span>
+        <button class="btn-ok" onclick="markOk('{{ video.path }}', this)">OK</button>
+        <button class="btn-delete" onclick="deleteVideo('{{ video.path }}', this)">Delete</button>
+        <span class="video-res">{{ video.resolution }}</span>
+    </div>
+    <video controls>
+        <source src="/serve_video?path={{ video.path | urlencode }}" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+</div>
+{% endfor %}
+
+    <script>
+        function markOk(videoPath, btnElement) {
+            if (!btnElement) {
+                console.error("btnElement is undefined in markOk");
+                return;
+            }
+    
+            let videoElement = btnElement.closest('.video-item'); // Find the parent video container
+    
+            fetch('/ok', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ video: videoPath, directory: '{{ directory }}' })
+            }).then(response => response.json())
+              .then(data => { 
+                  if (data.status === "added") {
+                      removeAndAddVideo(videoElement, data.new_video);
+                  } else {
+                      alert("Error: " + (data.message || "Could not mark as OK"));
+                  }
+              })
+              .catch(error => {
+                  console.error("Request failed:", error);
+                  alert("Request failed: " + error);
+              });
+        }
+    
+        function deleteVideo(videoPath, btnElement) {
+            if (!btnElement) {
+                console.error("btnElement is undefined in deleteVideo");
+                return;
+            }
+    
+            let videoElement = btnElement.closest('.video-item'); // Find the parent video container
+    
+            fetch('/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ video: videoPath, directory: '{{ directory }}' })
+            }).then(response => response.json())
+              .then(data => { 
+                  if (data.status === "deleted") {
+                      removeAndAddVideo(videoElement, data.new_video);
+                  } else {
+                      alert("Error: " + (data.message || "Could not delete video"));
+                  }
+              })
+              .catch(error => {
+                  console.error("Request failed:", error);
+                  alert("Request failed: " + error);
+              });
+        }
+    
+        function removeAndAddVideo(videoElement, newVideo) {
+            if (!videoElement) {
+                console.error("videoElement is undefined in removeAndAddVideo");
+                return;
+            }
+    
+            videoElement.remove(); // Remove the current video from the UI
+    
+            if (newVideo) {
+                let videoContainer = document.querySelector('.video-container');
+                let newDiv = document.createElement('div');
+                newDiv.className = "video-item";
+                newDiv.innerHTML = `
+                    <div class="btn-group">
+                        <button onclick="markOk('${newVideo}', this)">OK</button>
+                        <button onclick="deleteVideo('${newVideo}', this)">Delete</button>
+                    </div>
+                    <video controls>
+                        <source src="/serve_video?path=${encodeURIComponent(newVideo)}" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                `;
+                videoContainer.appendChild(newDiv);
+            }
+        }
+    </script>
+    
+    
+    
+</body>
+</html>
