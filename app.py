@@ -7,6 +7,7 @@ import cv2
 app = Flask(__name__)
 sort_by='size'
 session={}
+sizeSaved = 0
 
 def get_videos(directory,sort_by):
     video_exts = {".mp4", ".avi", ".mkv", ".mov", ".flv", ".wmv"}
@@ -28,13 +29,17 @@ def get_videos(directory,sort_by):
             if os.path.splitext(file)[1].lower() in video_exts and file_path not in ok_videos:
                 file_size = os.path.getsize(file_path)  # Convert to MB
 
-                try:
-                    cap = cv2.VideoCapture(file_path)
-                    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                    cap.release()
-                except Exception as e:
+                if sort_by =='resolution':
+                    try:
+                        cap = cv2.VideoCapture(file_path)
+                        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                        cap.release()
+                    except Exception as e:
+                        width=height=0
+                else:
                     width=height=0
+
 
                 resolution = f"{width}x{height}"
                 
@@ -75,17 +80,21 @@ def videos():
         return "Invalid directory path", 400
     video_list = get_videos(directory,sort_by)
 
-    session["videos"] = video_list
+    session["videos"] = video_list[2:]
     session["removed_videos"] = set()  # Store removed videos
 
 
-    return render_template('videos.html', videos=video_list[:10], directory=directory)
+    return render_template('videos.html', videos=video_list[:2], directory=directory)
 
 @app.route('/ok', methods=['POST'])
 def mark_ok():
     data = request.json
     video_path = data.get('video')
     directory = data.get('directory', '')
+
+    exis = session.get('removed_videos',set())
+    exis.add(video_path)
+    session['removed_videos']=exis
 
     if not video_path or not directory:
         return jsonify({"status": "error"}), 400
@@ -104,8 +113,15 @@ def mark_ok():
 
 @app.route('/delete', methods=['POST'])
 def delete_video():
+    global session
     video_path = request.json.get('video')
     directory = request.json.get('directory', '')
+
+    exis = session.get('removed_videos',set())
+    exis.add(video_path)
+    session['removed_videos']=exis
+
+
     if video_path and os.path.exists(video_path):
         os.remove(video_path)
         return jsonify({"status": "deleted", "new_video": get_next_video(directory)})
@@ -118,10 +134,15 @@ def get_next_video(directory):
 
     # Find the first available video not in removed list
     for video in video_list:
-        if video["path"] not in removed_videos:
+        if os.path.isfile(video["path"]) and video["path"] not in removed_videos:
+            exis = session.get('removed_videos',set())
+            exis.add(video["path"])
+            session['removed_videos']=exis
+
             return video
 
     return None  # No more videos left
 
 if __name__ == '__main__':
     app.run('0.0.0.0',port=9898)
+    #app.run(debug=True)
