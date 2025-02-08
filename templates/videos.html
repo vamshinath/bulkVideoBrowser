@@ -164,11 +164,13 @@
                 newDiv.className = "video-item";
                 newDiv.innerHTML = `
                     <div class="btn-group">
-                        <button onclick="markOk('${newVideo}', this)">OK</button>
-                        <button onclick="deleteVideo('${newVideo}', this)">Delete</button>
+                    <span class="file-size">{{ '${newVideo.size}' }} MB</span>
+                        <button class="btn-ok" onclick="markOk('${newVideo.path}', this)">OK</button>
+                        <button class="btn-delete" onclick="deleteVideo('${newVideo.path}', this)">Delete</button>
+                        <span class="video-res">{{ '${newVideo.resolution}' }}</span>
                     </div>
                     <video controls>
-                        <source src="/serve_video?path=${encodeURIComponent(newVideo)}" type="video/mp4">
+                        <source src="/serve_video?path={{ '${newVideo.path}' }}" type="video/mp4">
                         Your browser does not support the video tag.
                     </video>
                 `;
