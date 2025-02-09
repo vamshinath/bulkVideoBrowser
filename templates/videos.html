@@ -148,12 +148,16 @@
                         
                         <button class="btn btn-delete" onclick="deleteVideo('${video.path}', this)">Delete</button>
                         <span class="video-res">${video.resolution}</span>
+                        <span class="video-res">Dur:${video.seconds}</span>
+
+                        <span class="video-res">${video[video.sortField]}</span>
                     </div>
                 </div>
                 <video controls autoplay muted loop>
                     <source src="/serve_video?path=${encodeURIComponent(video.path)}" type="video/mp4">
                     Your browser does not support the video tag.
                 </video>
+                <a href=${video.path} target="_blank">url</a>
             `;
             videoContainer.appendChild(newDiv);
             totalSize += parseFloat(video.size);
@@ -243,8 +247,22 @@
                 
             }
             updateTotalSizeLabel()
+            document.querySelectorAll("video").forEach(video => {
+                video.addEventListener("loadedmetadata", function () {
+                    video.currentTime = video.duration *0.15; // Start from midway
+                    video.playbackRate = 1.5;
+                });
+            });
            
         }
+        document.addEventListener("DOMContentLoaded", function () {
+            document.querySelectorAll("video").forEach(video => {
+                video.addEventListener("loadedmetadata", function () {
+                    video.currentTime = video.duration *0.15; // Start from midway
+                    video.playbackRate = 1.5;
+                });
+            });
+        });
     </script>
 
 </body>

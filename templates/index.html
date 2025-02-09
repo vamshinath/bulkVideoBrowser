@@ -29,7 +29,7 @@
     <form method="POST">
         <div class="mb-3">
             <label for="directory" class="form-label">Enter Directory Path:</label>
-            <input type="text" class="form-control" name="directory" required placeholder="e.g., /media/user/videos">
+            <input type="text" class="form-control" name="directory" placeholder="e.g., /media/user/videos">
         </div>
 
         <div class="mb-3">
@@ -37,7 +37,29 @@
             <select name="sort_by" class="form-select">
                 <option value="size">File Size</option>
                 <option value="resolution">Resolution (WxH)</option>
+                <option value="seconds">Seconds</option>
+                <option value="szbydur">Size by dur</option>
+                <option value="ctime">Ctime</option>
+
+
             </select>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Sort Order:</label>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="sort_order" value="asc" id="sortAsc" >
+                <label class="form-check-label" for="sortAsc">Ascending</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="sort_order" value="desc" id="sortDesc" checked>
+                <label class="form-check-label" for="sortDesc">Descending</label>
+            </div>
+            
+        </div>
+        <div class="mb-3 form-check">
+            <input class="form-check-input" type="checkbox" name="loadLast" id="loadLast" checked>
+            <label class="form-check-label" for="loadLast">Load Last</label>
         </div>
 
         <button type="submit" class="btn btn-primary">Load Videos</button>
