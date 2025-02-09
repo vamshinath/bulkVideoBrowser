@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Manager</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        #image-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .image-wrapper {
+            position: relative;
+            width: 50%;
+            padding: 5px;
+        }
+        img {
+            width: 100%;
+            height: auto;
+            object-fit: contain;
+        }
+        .action-btn {
+            position: absolute;
+            top: 10px;
+            font-size: 0.75rem;
+            padding: 5px;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+        }
+        .keep-btn { left: 20%; background-color: green; }
+        .delete-btn { left: 40%; background-color: red; }
+        .move-btn { left: 60%; background-color: orange; }
+        .info-btn { left: 80%; background-color: blue; }
+
+        @media (max-width: 768px) {
+            .image-wrapper { width: 50%; }
+        }
+
+        @media (max-width: 480px) {
+            .image-wrapper { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container mt-5">
+    <h1 class="text-center">Image Manager</h1>
+    <form id="directory-form">
+        <div class="mb-3">
+            <label for="directory_path" class="form-label">Enter Directory Path</label>
+            <input type="text" class="form-control" id="directory_path" name="directory_path" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Load Images</button>
+    </form>
+
+    <div id="image-container" class="mt-5"></div>
+
+    <div id="pagination-controls" class="d-flex justify-content-between mt-3">
+        <button id="prev-page" class="btn btn-secondary" disabled>Previous</button>
+        <button id="next-page" class="btn btn-secondary">Next</button>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+    let currentPage = 1;
+    let totalImages = 0;
+
+    function loadImages(page = 1) {
+        const directory = $("#directory_path").val();
+        if (!directory) return;
+
+        $.ajax({
+            url: '/load_images',
+            method: 'POST',
+            data: { directory_path: directory, page: page },
+            success: function(response) {
+                if (response.images.length === 0) {
+                    alert("No more images.");
+                    return;
+                }
+
+                currentPage = page;
+                totalImages = response.total_images;
+                $('#image-container').empty();
+
+                response.images.forEach(image => {
+                    const imagePath = encodeURIComponent(image[0]);
+                    $('#image-container').append(`
+                        <div class="image-wrapper">
+                            <img src="/serve_image?image_path=${imagePath}" alt="${imagePath}">
+                            <button class="btn action-btn keep-btn" data-path="${image[0]}">Keep</button>
+                            <button class="btn action-btn delete-btn" data-path="${image[0]}">Delete</button>
+                            <button class="btn action-btn move-btn" data-path="${image[0]}">Move</button>
+                            <button class="btn action-btn info-btn">${image[1]} | ${image[2]}</button>
+                        </div>
+                    `);
+                });
+
+                updatePaginationButtons();
+            },
+            error: function() {
+                alert("Error loading images.");
+            }
+        });
+    }
+
+    // Handle dynamic buttons
+    $(document).on('click', '.keep-btn', function() {
+        const imagePath = $(this).data('path');
+        $(this).closest('.image-wrapper').remove();
+        $.post('/keep_image', { image_name: imagePath }, function(response) {
+            if (response.success) {
+                $(`img[alt='${imagePath}']`).closest('.image-wrapper').remove();
+            } else {
+                alert('Error keep image: ' + response.error);
+            }
+           
+        });
+    });
+
+    $(document).on('click', '.delete-btn', function() {
+        const imagePath = $(this).data('path');
+        $(this).closest('.image-wrapper').remove();
+        $.post('/delete_image', { image_name: imagePath }, function(response) {
+            if (response.success) {
+                $(`img[alt='${imagePath}']`).closest('.image-wrapper').remove();
+            } else {
+                alert('Error deleting image: ' + response.error);
+            }
+           
+        });
+    });
+
+    $(document).on('click', '.move-btn', function() {
+        const imagePath = $(this).data('path');
+        $(this).closest('.image-wrapper').remove();
+        $.post('/move_image', { image_name: imagePath }, function(response) {
+            if (response.success) {
+                $(`img[alt='${imagePath}']`).closest('.image-wrapper').remove();
+            } else {
+                alert('Error moving image: ' + response.error);
+            }
+        });
+    });
+
+    // Pagination Buttons
+    $('#next-page').click(function() {
+        if (currentPage * 50 < totalImages) {
+            loadImages(currentPage + 1);
+        }
+    });
+
+    $('#prev-page').click(function() {
+        if (currentPage > 1) {
+            loadImages(currentPage - 1);
+        }
+    });
+
+    function updatePaginationButtons() {
+        $('#prev-page').prop('disabled', currentPage === 1);
+        $('#next-page').prop('disabled', currentPage * 50 >= totalImages);
+    }
+
+    // Form Submission
+    $('#directory-form').submit(function(e) {
+        e.preventDefault();
+        loadImages(1); // Start at first page
+    });
+</script>
+
+</body>
+</html>
