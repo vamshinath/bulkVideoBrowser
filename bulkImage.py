@@ -1,12 +1,22 @@
 import os
-import shutil
-import humanize
+import shutil,sys
+import humanize,json
 from flask import Flask, request, jsonify, render_template, send_file
+from PIL import Image
+from datetime import datetime
+sys.path.insert(1, '/home/vamshi/gitRepos/machineSetupRepoMain/')
+from getImageProps import getScoreOnly,faceArea
+from getScore import getScore
+Image.MAX_IMAGE_PIXELS = None
 
 app = Flask(__name__)
 IMAGES_PER_PAGE = 50
 root_dir=''
-def get_images_from_directory(root_dir):
+def get_images_from_directory(root_dir,sortBy,sort_order,load_last):
+
+
+    print(sortBy,sort_order,load_last)
+
 
     alreadySeen = []
     try:
@@ -15,35 +25,99 @@ def get_images_from_directory(root_dir):
                 alreadySeen.append(ln[:-1])
     except Exception as e:
         alreadySeen=[]
+    finalRec=[]
+    if load_last:
+        print("loaded from json")
+        with open(os.path.join(root_dir,"lastLoad.jsonl"), "r", encoding="utf-8") as fl:
+            for line in fl:
+                rec = json.loads(line.strip())  # Convert JSON string to dictionary
+                if rec['file'] not in alreadySeen and os.path.isfile(rec['file']):
+                    finalRec.append(rec)
 
 
-    image_files = []
-    for subdir, _, files in os.walk(root_dir):
-        for file in files:
-            file_path = os.path.abspath(os.path.join(subdir, file))  # Ensure full path
-            if file.lower().endswith(('jpg', 'jpeg', 'png', 'bmp', 'webp', 'gif')) and file_path not in alreadySeen:
-                image_files.append([
-                    file_path,
-                    os.path.getsize(file_path),
-                    os.stat(file_path).st_ctime
-                ])
-    return [[img, f"{humanize.naturalsize(sz)}", str(ctime)] for img, sz, ctime in sorted(image_files, key=lambda x: x[1], reverse=True)]
+    else:
+        image_files = []
+        for subdir, _, files in os.walk(root_dir):
+            for file in files:
+                file_path = os.path.abspath(os.path.join(subdir, file))  # Ensure full path
+                if file.lower().endswith(('jpg', 'jpeg', 'png', 'bmp', 'webp', 'gif')) and file_path not in alreadySeen:
+                    image_files.append([
+                        file_path,
+                        os.path.getsize(file_path),
+                        os.stat(file_path).st_mtime
+                    ])
+
+        finalRec=[]
+        ctr=0
+        ttl = len(image_files)
+
+        for img,flsz,mtime in image_files:
+            print(ctr,ttl)
+            ctr+=1
+            rec={}
+            try:
+                Img = Image.open(img)
+                nsfw_score1=-1
+                skinPer=-10
+                score=-1
+                w=Img.size[0]
+                h=Img.size[1]
+
+                try:
+                    face_area = faceArea(img)
+                except Exception as e:
+                    face_area=-1
+                rec['file']=img
+                rec['w']=w
+                rec['h']=h
+                rec['pixels']=w*h
+                rec['face_area']=round(face_area,2)
+                rec['size']=flsz
+                rec['hsize']=humanize.naturalsize(flsz)
+                rec['mtime']=mtime
+                tmp = getScoreOnly(img,True,True)
+                if tmp:
+                    skinPer = tmp['skinPer']
+                    nsfw_score1 = tmp['nsfw_score1']
+                rec['skinPer']=skinPer
+                rec['nsfw_score']=nsfw_score1
+                finalRec.append(rec)
+            except Exception as e:
+                print(e)
+
+            with open(os.path.join(root_dir,"lastLoad.jsonl"),'a',encoding='utf-8') as fl:
+                fl.write(json.dumps(rec) + "\n") 
+
+    preSort = sorted(finalRec,key= lambda x:x[sortBy],reverse=sort_order)
+    finalList=[]
+    for rec in preSort:
+        finalList.append([rec['file'],str(rec['w'])+'x'+str(rec['h']),rec['face_area'],rec['hsize'],rec['skinPer'],rec['nsfw_score']])
+    return finalList
 
 @app.route('/')
 def index():
     return render_template('Imageindex.html')
 
-@app.route('/load_images', methods=['POST'])
+@app.route('/load_images', methods=['GET', 'POST'])
 def load_images():
     global root_dir
     directory = request.form.get('directory_path')
+    print(list(request.form.items()))
+    sort_by = request.form.get('sort_by', 'size') 
+    sort_order= request.form.get('sort_order', 'asc') != 'asc'
+    load_last = request.form.get("loadLast") == "true"
+
+
+    print(sort_by,request.form.get('sort_order'),request.form.get("loadLast"))
+
+
     root_dir = directory
     page = int(request.form.get('page', 1))
 
     if not directory or not os.path.exists(directory):
         return jsonify({'images': [], 'error': 'Invalid directory path'})
 
-    images = get_images_from_directory(directory)
+    images = get_images_from_directory(directory,sort_by,sort_order,load_last)
     start_index = (page - 1) * IMAGES_PER_PAGE
     end_index = start_index + IMAGES_PER_PAGE
     images_on_page = images[start_index:end_index]

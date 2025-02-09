@@ -48,11 +48,36 @@
 
 <div class="container mt-5">
     <h1 class="text-center">Image Manager</h1>
-    <form id="directory-form">
+    <form id="directory-form" method="POST">
         <div class="mb-3">
             <label for="directory_path" class="form-label">Enter Directory Path</label>
             <input type="text" class="form-control" id="directory_path" name="directory_path" required>
         </div>
+        <div class="mb-3">
+            <label for="sort_by" class="form-label">Sort Videos By:</label>
+            <select name="sort_by" class="form-select" id="sortSelect">
+                <option value="size">File Size</option>
+                <option value="pixels">Resolution (WxH)</option>
+                <option value="skinPer">skinPer</option>
+                <option value="nsfw_score">nsfw_score</option>
+                <option value="face_area">Face area</option>
+                <option value="mtime">Ctime</option>
+            </select>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Sort Order:</label>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="sort_order" value="asc" id="sortAsc" >
+                <label class="form-check-label" for="sortAsc">Ascending</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="sort_order" value="desc" id="sortDesc" checked>
+                <label class="form-check-label" for="sortDesc">Descending</label>
+            </div>
+            <div class="mb-3 form-check">
+                <input class="form-check-inputc" type="checkbox" name="loadLast" id="loadLast" >
+                <label class="form-check-label" for="loadLast">Load Last</label>
+            </div>
         <button type="submit" class="btn btn-primary">Load Images</button>
     </form>
 
@@ -71,12 +96,17 @@
 
     function loadImages(page = 1) {
         const directory = $("#directory_path").val();
+        var tsort_by = document.getElementById("sortSelect");
+        var sort_by = tsort_by.options[tsort_by.selectedIndex].value;
+        const sort_order = document.querySelector('input[name="sort_order"]:checked').value
+        const loadLast = document.querySelector('.form-check-inputc').checked;
+
         if (!directory) return;
 
         $.ajax({
             url: '/load_images',
             method: 'POST',
-            data: { directory_path: directory, page: page },
+            data: { directory_path: directory, page: page,sort_by:sort_by,sort_order:sort_order,loadLast:loadLast },
             success: function(response) {
                 if (response.images.length === 0) {
                     alert("No more images.");
@@ -92,10 +122,10 @@
                     $('#image-container').append(`
                         <div class="image-wrapper">
                             <img src="/serve_image?image_path=${imagePath}" alt="${imagePath}">
-                            <button class="btn action-btn keep-btn" data-path="${image[0]}">Keep</button>
-                            <button class="btn action-btn delete-btn" data-path="${image[0]}">Delete</button>
-                            <button class="btn action-btn move-btn" data-path="${image[0]}">Move</button>
-                            <button class="btn action-btn info-btn">${image[1]} | ${image[2]}</button>
+                            <button class="btn action-btn keep-btn" data-path="${image[0]}">Keep ${image[3]}</button>
+                            <button class="btn action-btn delete-btn" data-path="${image[0]}">${image[1]}</button>
+                            <button class="btn action-btn move-btn" data-path="${image[0]}">NSFW:${image[5]}</button>
+                            <button class="btn action-btn info-btn">FA:${image[2]} |${image[4]} </button>
                         </div>
                     `);
                 });
