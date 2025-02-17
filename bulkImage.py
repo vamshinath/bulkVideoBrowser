@@ -181,14 +181,18 @@ def get_images_from_directory(root_dir,sortBy,sort_order,load_last):
         with open(os.path.join(root_dir,"lastLoad.jsonl"), "r", encoding="utf-8") as fl:
             for line in fl:
                 rec = json.loads(line.strip())
-                alreadyCalc.add(rec['file'])
+                try:
+                    alreadyCalc.add(rec['file'])
+                except Exception as e:
+                    e=0
 
 
     if load_last:
         print("loaded from json")
         with open(os.path.join(root_dir,"lastLoad.jsonl"), "r", encoding="utf-8") as fl:
-            for line in fl:
+            for ctr,line in enumerate(fl):
                 rec = json.loads(line.strip())  # Convert JSON string to dictionary
+                print(ctr)
                 if rec['file'] not in alreadySeen and os.path.isfile(rec['file']):
                     finalRec.append(rec)
 
@@ -209,6 +213,7 @@ def get_images_from_directory(root_dir,sortBy,sort_order,load_last):
         finalRec=[]
         ctr=0
         ttl = len(image_files)
+        image_files = sorted(image_files,key=lambda x:x[1],reverse=True)
 
         for img,flsz,mtime in image_files:
             print(ctr,ttl)
