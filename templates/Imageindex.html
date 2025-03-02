@@ -78,6 +78,10 @@
                 <input class="form-check-inputc" type="checkbox" name="loadLast" id="loadLast" >
                 <label class="form-check-label" for="loadLast">Load Last</label>
             </div>
+            <div class="mb-3 form-check">
+                <input class="form-check-inputq" type="checkbox" name="quickLoad" id="quickLoad" >
+                <label class="form-check-label" for="quickLoad">Quick Load</label>
+            </div>
         <button type="submit" class="btn btn-primary">Load Images</button>
     </form>
 
@@ -100,13 +104,15 @@
         var sort_by = tsort_by.options[tsort_by.selectedIndex].value;
         const sort_order = document.querySelector('input[name="sort_order"]:checked').value
         const loadLast = document.querySelector('.form-check-inputc').checked;
+        const quickLoad = document.querySelector('.form-check-inputq').checked;
+
 
         if (!directory) return;
 
         $.ajax({
             url: '/load_images',
             method: 'POST',
-            data: { directory_path: directory, page: page,sort_by:sort_by,sort_order:sort_order,loadLast:loadLast },
+            data: { directory_path: directory, page: page,sort_by:sort_by,sort_order:sort_order,loadLast:loadLast,quickLoad:quickLoad },
             success: function(response) {
                 if (response.images.length === 0) {
                     alert("No more images.");
@@ -124,7 +130,7 @@
                             <img src="/serve_image?image_path=${imagePath}" alt="${imagePath}">
                             <button class="btn action-btn keep-btn" data-path="${image[0]}">Keep ${image[3]}</button>
                             <button class="btn action-btn delete-btn" data-path="${image[0]}">${image[1]}</button>
-                            <button class="btn action-btn move-btn" data-path="${image[0]}">NSFW:${image[5]}</button>
+                            <button class="btn action-btn move-btn" data-path="${image[0]}">NSFW:${image[5]} Move</button>
                             <button class="btn action-btn info-btn">FA:${image[2]} |${image[4]} </button>
                         </div>
                     `);

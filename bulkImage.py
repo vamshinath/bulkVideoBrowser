@@ -9,7 +9,7 @@ Image.MAX_IMAGE_PIXELS = None
 from transformers import pipeline
 import requests,string
 import logging,cv2,random
-import face_recognition
+import face_recognition,psutil
 import numpy as np
 from cvzone.SelfiSegmentationModule import SelfiSegmentation
 segmentor = SelfiSegmentation()
@@ -17,9 +17,12 @@ mp3_file = '/home/vamshi/mp3.mp3'
 
 
 logging.getLogger("transformers").setLevel(logging.ERROR)
-
+quick_load=False
 
 def faceArea(fl):
+    global quick_load
+    if quick_load:
+       return -9090
     try:
         total_pixels = Image.open(fl).size
         faceimage = face_recognition.load_image_file(fl)
@@ -32,6 +35,11 @@ def faceArea(fl):
 
 
 def findPer2(imagepath,removeBG=True):
+
+    global quick_load
+    if quick_load:
+       return -9090
+
     img=cv2.imread(imagepath)
     total_pixels = Image.open(imagepath).size
     total_pixels = total_pixels[0]*total_pixels[1]
@@ -125,19 +133,7 @@ def classify_nsfw(image_path):
 
 def getNSFWScoreJS(file_path,in_memory_file=False):
     url = "http://0.0.0.0:3333/single/multipart-form"
-    if in_memory_file:
-        return 0
-        in_memory_file.seek(0)
-         
-        files = {"content": ("temp.jpg", in_memory_file, "image/jpeg")}
     
-    try:
-        rsp = requests.get(url,timeout=3)
-    except Exception as e:
-        os.system(f"mpg123 {mp3_file}")
-        print('Error',e)
-
-
     files = {"content": open(file_path, "rb")}
     response = requests.post(url, files=files)
     jsResponsee = sorted(response.json()['prediction'],key=lambda x:x['probability'],reverse=True)[0]
@@ -151,9 +147,13 @@ def isMemAvailable():
     return psutil.virtual_memory().available > 1173549056
 
 def getNSFWScore(img1):
+    global quick_load
     NJsScore = getNSFWScoreJS(img1)
+    if quick_load:
+        return NJsScore
     addmCod = classify_nsfw(img1)
     nsfw_score = [item['score'] for item in addmCod if item['label'] == 'nsfw'][0]
+
     return round((nsfw_score+NJsScore)/2,4)
 
 
@@ -164,7 +164,7 @@ root_dir=''
 def get_images_from_directory(root_dir,sortBy,sort_order,load_last):
 
 
-    print(sortBy,sort_order,load_last)
+    print(sortBy,sort_order,load_last,quick_load)
 
 
     alreadySeen = []
@@ -179,7 +179,8 @@ def get_images_from_directory(root_dir,sortBy,sort_order,load_last):
     alreadyCalc=set()
     if os.path.isfile(os.path.join(root_dir,"lastLoad.jsonl")):
         with open(os.path.join(root_dir,"lastLoad.jsonl"), "r", encoding="utf-8") as fl:
-            for line in fl:
+            for ctr,line in enumerate(fl):
+                print(ctr)
                 rec = json.loads(line.strip())
                 try:
                     alreadyCalc.add(rec['file'])
@@ -191,8 +192,8 @@ def get_images_from_directory(root_dir,sortBy,sort_order,load_last):
         print("loaded from json")
         with open(os.path.join(root_dir,"lastLoad.jsonl"), "r", encoding="utf-8") as fl:
             for ctr,line in enumerate(fl):
-                rec = json.loads(line.strip())  # Convert JSON string to dictionary
                 print(ctr)
+                rec = json.loads(line.strip())  # Convert JSON string to dictionary
                 if rec['file'] not in alreadySeen and os.path.isfile(rec['file']):
                     finalRec.append(rec)
 
@@ -261,7 +262,9 @@ def get_images_from_directory(root_dir,sortBy,sort_order,load_last):
                 if not isMemAvailable():
                     print("Memory full,exiting")
                     os.system(f"mpg123 {mp3_file}")
-                    sys.exit(0)
+                    #sys.exit(0)
+                    pid = os.getpid()
+                    psutil.Process(pid).terminate()
 
     preSort = sorted(finalRec,key= lambda x:x[sortBy],reverse=sort_order)
     finalList=[]
@@ -275,15 +278,17 @@ def index():
 
 @app.route('/load_images', methods=['GET', 'POST'])
 def load_images():
-    global root_dir
+
+    global root_dir,quick_load
     directory = request.form.get('directory_path')
     print(list(request.form.items()))
     sort_by = request.form.get('sort_by', 'size') 
     sort_order= request.form.get('sort_order', 'asc') != 'asc'
     load_last = request.form.get("loadLast") == "true"
+    quick_load = request.form.get("quickLoad") == "true"
 
 
-    print(sort_by,request.form.get('sort_order'),request.form.get("loadLast"))
+    print(sort_by,request.form.get('sort_order'),request.form.get("loadLast"),quick_load)
 
 
     root_dir = directory
@@ -312,7 +317,7 @@ def keep_image():
     with open(root_dir+"/seen.txt",'a') as fl:
         fl.write(image_path+"\n")
 
-    target_dir = os.path.dirname(root_dir) + "_keeped"
+    target_dir = root_dir + "_keeped"
     os.makedirs(target_dir, exist_ok=True)
     
     try:
@@ -340,7 +345,7 @@ def move_image():
     if not image_path or not os.path.exists(image_path):
         return jsonify({'success': False, 'error': 'Image not found'}), 400
 
-    target_dir = os.path.dirname(root_dir) + "_moved"
+    target_dir = root_dir + "_moved"
     os.makedirs(target_dir, exist_ok=True)
     
     try:
