@@ -63,19 +63,14 @@ def get_images_from_directory(root_dir,sortBy,sort_order,load_last):
         }
 
         cursor = list(db["files"].find(query, {"_id": 1, "filehash": 1, "filefullpath": 1}).sort("filesize", 1))
-        while cursor:
-            image_files.append(cursor.pop(0)['filefullpath'])  # smallest
-            if cursor:
-                image_files.append(cursor.pop(-1)['filefullpath'])  # largest
-
-        finalRec=[]
-        ctr=0
-        ttl = len(image_files)
+        ttl = len(cursor)
 
         print('total files',ttl)
 
-        for img in tqdm(image_files,total=ttl,unit='img'):
-            filehash = hasher.hash_file(img)
+        for img in tqdm(cursor,total=ttl,unit='img'):
+            filehash=img['filehash']
+            img = img['filefullpath']
+            if not os.path.isfile(img):continue
             props = db['rootLookup'].find_one({'_id': filehash})
 
             if props and props['props']:

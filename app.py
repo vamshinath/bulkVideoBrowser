@@ -1,9 +1,13 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file
 import os
 import humanize
-
+from pymongo import MongoClient
+mongoClient = MongoClient('mongodb://localhost:27017/')
+db = mongoClient["filesManager"]
 import cv2,json
-
+from filehash import FileHash
+from tqdm import tqdm
+hasher = FileHash('sha256')
 app = Flask(__name__)
 sort_by='size'
 session={}
@@ -33,34 +37,38 @@ def get_videos(directory,sort_by):
             if rec['path'] not in ok_videos and os.path.isfile(rec['path']):
                 videos.append(rec)
     else:
-        for root, _, files in os.walk(directory):
-            for file in files:
-                file_path = os.path.join(root, file)
-                if os.path.splitext(file)[1].lower() in video_exts and file_path not in ok_videos:
-                    file_size = os.path.getsize(file_path)  # Convert to MB
-                    width=height=0
-                    seconds=1
-                    ctime = os.stat(file_path).st_mtime
-                    if sort_by =='resolution' or True:
-                        try:
-                            cap = cv2.VideoCapture(file_path)
-                            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                            fps = cap.get(cv2.CAP_PROP_FPS)
-                            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                            duration = frame_count/fps
-                            seconds = round(duration,2)
-                            cap.release()
-                        except Exception as e:
-                            e=0
-                    else:
-                        width=height=0
 
+        query = {
+            "filetype": "video",
+            "isReady": True,
+            "filefullpath": {"$regex": directory}
+        }
+        video_files=[]
+        cursor = list(db["files"].find(query, {"_id": 1, "filehash": 1, "filefullpath": 1}).sort("filesize", 1))
+        while cursor:
+            video_files.append(cursor.pop(0)['filefullpath'])  # smallest
+            if cursor:
+                video_files.append(cursor.pop(-1)['filefullpath'])  # largest
 
-                    resolution = f"{width}x{height}"
-                    
-                    videos.append({"path": file_path,'ctime':ctime,"size": file_size,"seconds":seconds,"szbydur":round(file_size/max(seconds,1),2)
-                                ,"resolution": resolution,"width": width, "height": height,"sortField":sort_by})
+        finalRec=[]
+        ctr=0
+        ttl = len(video_files)
+
+        print('total files',ttl)
+
+        for img in tqdm(video_files,total=ttl,unit='vid'):
+            filehash = hasher.hash_file(img)
+            props = db['rootLookup'].find_one({'_id': filehash})
+            if props and props.get('props'):
+                width = props['props']['width']
+                height = props['props']['height']
+
+                resolution = f"{width}x{height}"
+                videos.append({"path": props['filefullpath'],'ctime':props['filectime'],"size": props['filesize']
+                               ,"seconds":props['props']['duration'],
+                               "szbydur":round(props['filesize']/max(props['props']['duration'],1),2),
+                               'nsfw_score':props['props']['nsfw_score']
+                    ,"resolution": resolution,"width": width, "height": height,"sortField":sort_by})
                 
     if sort_by == "resolution":
         videos.sort(key=lambda x: (x["width"]* x["height"]),reverse=sort_order)  # Sort by WxH (smallest first)
@@ -72,6 +80,8 @@ def get_videos(directory,sort_by):
         videos.sort(key=lambda x: x["szbydur"],reverse=sort_order)
     elif sort_by == "ctime":
         videos.sort(key=lambda x: x["ctime"],reverse=sort_order)
+    elif sort_by == "nsfw_score":
+        videos.sort(key=lambda x: x["nsfw_score"],reverse=sort_order)
 
     
     with open(lastLoadFile,"w") as fl:
