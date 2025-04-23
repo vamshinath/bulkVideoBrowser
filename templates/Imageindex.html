@@ -62,6 +62,9 @@
                 <option value="nsfw_score">nsfw_score</option>
                 <option value="face_area">Face area</option>
                 <option value="mtime">Ctime</option>
+                <option value="scoreAvg">scoreAvg</option>
+                <option value="exposedScore">exposedScore</option>
+
             </select>
         </div>
         <div class="mb-3">
@@ -131,7 +134,7 @@
                             <button class="btn action-btn keep-btn" data-path="${image[0]}">Keep ${image[3]}</button>
                             <button class="btn action-btn delete-btn" data-path="${image[0]}">${image[1]}</button>
                             <button class="btn action-btn move-btn" data-path="${image[0]}">NSFW:${image[5]} Move</button>
-                            <button class="btn action-btn info-btn">FA:${image[2]} |${image[4]} </button>
+                            <button class="btn action-btn info-btn">FA:${image[2]} |SK:${image[4]} ${image[6]} ${image[7]} </button>
                         </div>
                     `);
                 });
