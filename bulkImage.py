@@ -270,7 +270,7 @@ def index():
 
     counter = Counter(sNames)
     result = [[name, count] for name, count in counter.items()]
-    result.sort(key=lambda x:x[1])
+    result.sort(key=lambda x:x[1],reverse=True)
     return render_template('Imageindex.html',sort_fields=sort_fields,sNames=result)
 
 @app.route('/load_images', methods=['GET', 'POST'])
