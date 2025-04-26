@@ -56,15 +56,17 @@
         <div class="mb-3">
             <label for="sort_by" class="form-label">Sort Videos By:</label>
             <select name="sort_by" class="form-select" id="sortSelect">
-                <option value="size">File Size</option>
-                <option value="pixels">Resolution (WxH)</option>
-                <option value="skinPer">skinPer</option>
-                <option value="nsfw_score">nsfw_score</option>
-                <option value="face_area">Face area</option>
-                <option value="mtime">Ctime</option>
-                <option value="scoreAvg">scoreAvg</option>
-                <option value="exposedScore">exposedScore</option>
-
+                {% for value, label in sort_fields %}
+                    <option value="{{ value }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="mb-3">
+            <label for="filter_by" class="form-label">filter By:</label>
+            <select name="filter_by" class="form-select" id="filter_by">
+                {% for value,crt in sNames %}
+                    <option value="{{ value }}">{{ value }}-{{crt}}</option>
+                {% endfor %}
             </select>
         </div>
         <div class="mb-3">
@@ -104,7 +106,11 @@
     function loadImages(page = 1) {
         const directory = $("#directory_path").val();
         var tsort_by = document.getElementById("sortSelect");
+        var tfilter_by = document.getElementById("filter_by");
+
         var sort_by = tsort_by.options[tsort_by.selectedIndex].value;
+        var filter_by = tfilter_by.options[tfilter_by.selectedIndex].value;
+
         const sort_order = document.querySelector('input[name="sort_order"]:checked').value
         const loadLast = document.querySelector('.form-check-inputc').checked;
         const quickLoad = document.querySelector('.form-check-inputq').checked;
@@ -115,7 +121,7 @@
         $.ajax({
             url: '/load_images',
             method: 'POST',
-            data: { directory_path: directory, page: page,sort_by:sort_by,sort_order:sort_order,loadLast:loadLast,quickLoad:quickLoad },
+            data: { directory_path: directory, page: page,sort_by:sort_by,sort_order:sort_order,loadLast:loadLast,quickLoad:quickLoad,filter_by:filter_by},
             success: function(response) {
                 if (response.images.length === 0) {
                     alert("No more images.");

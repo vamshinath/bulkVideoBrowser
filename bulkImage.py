@@ -12,6 +12,10 @@ import logging,cv2,random
 import face_recognition,psutil
 import numpy as np
 from pymongo import MongoClient
+import pickle,time
+import face_recognition
+from bson.binary import Binary
+from collections import Counter
 mongoClient = MongoClient('mongodb://localhost:27017/')
 db = mongoClient["filesManager"]
 mp3_file = '/home/vamshi/mp3.mp3'
@@ -22,7 +26,13 @@ hasher = FileHash('sha256')
 app = Flask(__name__)
 IMAGES_PER_PAGE = 50
 root_dir=''
-def get_images_from_directory(root_dir,sortBy,sort_order,load_last):
+sNames=[
+    '_'
+]
+
+dbimg = mongoClient["filesLookup"]
+
+def get_images_from_directory(root_dir,sortBy,sort_order,load_last,filter_by):
 
     print(sortBy,sort_order,load_last,quick_load)
     alreadySeen = []
@@ -49,7 +59,8 @@ def get_images_from_directory(root_dir,sortBy,sort_order,load_last):
         with open(os.path.join(root_dir,"lastLoad.jsonl"), "r", encoding="utf-8") as fl:
             for line in fl:
                 rec = json.loads(line.strip())  # Convert JSON string to dictionary
-                if rec and rec['file'] not in alreadySeen and os.path.isfile(rec['file']):
+                if rec and rec['file'] not in alreadySeen and os.path.isfile(rec['file']) and \
+                rec['file'] not in finalRec and (rec.get('suggestedName','_') == filter_by or filter_by == '_') :
                     finalRec.append(rec)
 
 
@@ -107,12 +118,64 @@ def get_images_from_directory(root_dir,sortBy,sort_order,load_last):
                     except Exception as e:
                         rec['scoreAvg'] = -1
 
+                    
+                    try:
+                        sName= props.get('givenName',props.get('suggestedName','-'))
+                        sNames.append(sName)
+                        rec['suggestedName'] = sName
+                    except Exception as e:
+                        rec['suggestedName'] = -1
+
+                    
+
                     exposedLabels = ['ARMPITS_EXPOSED_score','EXPOSED_ARMPITS_score',
                          'BELLY_EXPOSED_score','EXPOSED_BELLY_score',
                          'EXPOSED_BUTTOCKS_score','BUTTOCKS_EXPOSED_score'
                          'EXPOSED_BREAST_F_score','FEMALE_BREAST_EXPOSED',
                          'FEMALE_GENITALIA_EXPOSED','EXPOSED_GENITALIA_F'
                          ]
+                    exposedLabels.extend(
+                        [
+                            'ARMPITS_COVERED_area'
+                            'ARMPITS_COVERED_score',
+                            'ARMPITS_EXPOSED_area',
+                            'ARMPITS_EXPOSED_score',
+                            'BELLY_COVERED_area',
+                            'BELLY_COVERED_score',
+                            'BELLY_EXPOSED_area',
+                            'BELLY_EXPOSED_score',
+                            'BUTTOCKS_COVERED_area',
+                            'BUTTOCKS_COVERED_score',
+                            'BUTTOCKS_EXPOSED_area',
+                            'BUTTOCKS_EXPOSED_score',
+                            'COVERED_BELLY_area',
+                            'COVERED_BELLY_score',
+                            'COVERED_BREAST_F_area',
+                            'COVERED_BREAST_F_score',
+                            'COVERED_BUTTOCKS_area',
+                            'COVERED_BUTTOCKS_score',
+                            'COVERED_GENITALIA_F_area',
+                            'COVERED_GENITALIA_F_score',
+                            'EXPOSED_ARMPITS_area',
+                            'EXPOSED_ARMPITS_score',
+                            'EXPOSED_BELLY_area',
+                            'EXPOSED_BELLY_score',
+                            'EXPOSED_BREAST_F_area',
+                            'EXPOSED_BREAST_F_score',
+                            'EXPOSED_BUTTOCKS_area',
+                            'EXPOSED_BUTTOCKS_score',
+                            'EXPOSED_GENITALIA_F_area',
+                            'EXPOSED_GENITALIA_F_score',
+                            'FEMALE_BREAST_COVERED_area',
+                            'FEMALE_BREAST_COVERED_score',
+                            'FEMALE_BREAST_EXPOSED_area',
+                            'FEMALE_BREAST_EXPOSED_score',
+                            'FEMALE_GENITALIA_COVERED_area',
+                            'FEMALE_GENITALIA_COVERED_score',
+                            'FEMALE_GENITALIA_EXPOSED_area',
+                            'FEMALE_GENITALIA_EXPOSED_score'
+                        ]
+                    )
                     
                     rec['exposedScore']= 0
                     topExposedLabel='NaN'
@@ -121,6 +184,7 @@ def get_images_from_directory(root_dir,sortBy,sort_order,load_last):
                     for label in exposedLabels:
                         try:
                             lbScore = props['props']['specialProps'][label]
+                            rec[label]=lbScore
                             vals.append(lbScore)
                             if topExposedScore < lbScore:
                                 topExposedLabel=label
@@ -143,15 +207,71 @@ def get_images_from_directory(root_dir,sortBy,sort_order,load_last):
                     fl.write(json.dumps(rec) + "\n") 
 
 
-    preSort = sorted(finalRec,key= lambda x:x[sortBy],reverse=sort_order)
+    preSort = sorted(finalRec,key= lambda x:x.get(sortBy,-1),reverse=sort_order)[:100]
     finalList=[]
+    addedList=set()
     for rec in preSort:
-        finalList.append([rec['file'],str(rec['w'])+'x'+str(rec['h']),rec['face_area'],rec['hsize'],rec['skinPer'],rec['nsfw_score'],rec['topExposedLabel'],rec['scoreAvg']])
+        if rec['file'] not in addedList:
+            addedList.add(rec['file'])
+            finalList.append([rec['file'],str(rec['w'])+'x'+str(rec['h']),rec['face_area'],rec['hsize'],rec['skinPer'],rec['nsfw_score'],rec['topExposedLabel'],rec['scoreAvg']])
     return finalList
 
 @app.route('/')
 def index():
-    return render_template('Imageindex.html')
+
+    sort_fields = [
+        ("size", "File Size"),
+        ("pixels", "Resolution (WxH)"),
+        ("skinPer", "skinPer"),
+        ("nsfw_score", "nsfw_score"),
+        ("face_area", "Face area"),
+        ("mtime", "Ctime"),
+        ("scoreAvg", "scoreAvg"),
+        ("exposedScore", "exposedScore"),
+        ('ARMPITS_COVERED_area','ARMPITS_COVERED_area'),
+        ('ARMPITS_COVERED_score','ARMPITS_COVERED_score'),
+        ('ARMPITS_EXPOSED_area','ARMPITS_EXPOSED_area'),
+        ('ARMPITS_EXPOSED_score','ARMPITS_EXPOSED_score'),
+        ('BELLY_COVERED_area','BELLY_COVERED_area'),
+        ('BELLY_COVERED_score','BELLY_COVERED_score'),
+        ('BELLY_EXPOSED_area','BELLY_EXPOSED_area'),
+        ('BELLY_EXPOSED_score','BELLY_EXPOSED_score'),
+        ('BUTTOCKS_COVERED_area','BUTTOCKS_COVERED_area'),
+        ('BUTTOCKS_COVERED_score','BUTTOCKS_COVERED_score'),
+        ('BUTTOCKS_EXPOSED_area','BUTTOCKS_EXPOSED_area'),
+        ('BUTTOCKS_EXPOSED_score','BUTTOCKS_EXPOSED_score'),
+        ('COVERED_BELLY_area','COVERED_BELLY_area'),
+        ('COVERED_BELLY_score','COVERED_BELLY_score'),
+        ('COVERED_BREAST_F_area','COVERED_BREAST_F_area'),
+        ('COVERED_BREAST_F_score','COVERED_BREAST_F_score'),
+        ('COVERED_BUTTOCKS_area','COVERED_BUTTOCKS_area'),
+        ('COVERED_BUTTOCKS_score','COVERED_BUTTOCKS_score'),
+        ('COVERED_GENITALIA_F_area','COVERED_GENITALIA_F_area'),
+        ('COVERED_GENITALIA_F_score','COVERED_GENITALIA_F_score'),
+        ('EXPOSED_ARMPITS_area','EXPOSED_ARMPITS_area'),
+        ('EXPOSED_ARMPITS_score','EXPOSED_ARMPITS_score'),
+        ('EXPOSED_BELLY_area','EXPOSED_BELLY_area'),
+        ('EXPOSED_BELLY_score','EXPOSED_BELLY_score'),
+        ('EXPOSED_BREAST_F_area','EXPOSED_BREAST_F_area'),
+        ('EXPOSED_BREAST_F_score','EXPOSED_BREAST_F_score'),
+        ('EXPOSED_BUTTOCKS_area','EXPOSED_BUTTOCKS_area'),
+        ('EXPOSED_BUTTOCKS_score','EXPOSED_BUTTOCKS_score'),
+        ('EXPOSED_GENITALIA_F_area','EXPOSED_GENITALIA_F_area'),
+        ('EXPOSED_GENITALIA_F_score','EXPOSED_GENITALIA_F_score'),
+        ('FEMALE_BREAST_COVERED_area','FEMALE_BREAST_COVERED_area'),
+        ('FEMALE_BREAST_COVERED_score','FEMALE_BREAST_COVERED_score'),
+        ('FEMALE_BREAST_EXPOSED_area','FEMALE_BREAST_EXPOSED_area'),
+        ('FEMALE_BREAST_EXPOSED_score','FEMALE_BREAST_EXPOSED_score'),
+        ('FEMALE_GENITALIA_COVERED_area','FEMALE_GENITALIA_COVERED_area'),
+        ('FEMALE_GENITALIA_COVERED_score','FEMALE_GENITALIA_COVERED_score'),
+        ('FEMALE_GENITALIA_EXPOSED_area','FEMALE_GENITALIA_EXPOSED_area'),
+        ('FEMALE_GENITALIA_EXPOSED_score','FEMALE_GENITALIA_EXPOSED_score')
+    ]
+
+    counter = Counter(sNames)
+    result = [[name, count] for name, count in counter.items()]
+    result.sort(key=lambda x:x[1])
+    return render_template('Imageindex.html',sort_fields=sort_fields,sNames=result)
 
 @app.route('/load_images', methods=['GET', 'POST'])
 def load_images():
@@ -163,9 +283,10 @@ def load_images():
     sort_order= request.form.get('sort_order', 'asc') != 'asc'
     load_last = request.form.get("loadLast") == "true"
     quick_load = request.form.get("quickLoad") == "true"
+    filter_by = request.form.get('filter_by', '-') 
 
 
-    print(sort_by,request.form.get('sort_order'),request.form.get("loadLast"),quick_load)
+    print(sort_by,request.form.get('sort_order'),request.form.get("loadLast"),quick_load,filter_by)
 
 
     root_dir = directory
@@ -174,7 +295,7 @@ def load_images():
     if not directory or not os.path.exists(directory):
         return jsonify({'images': [], 'error': 'Invalid directory path'})
 
-    images = get_images_from_directory(directory,sort_by,sort_order,load_last)
+    images = get_images_from_directory(directory,sort_by,sort_order,load_last,filter_by)
     start_index = (page - 1) * IMAGES_PER_PAGE
     end_index = start_index + IMAGES_PER_PAGE
     images_on_page = images[start_index:end_index]
