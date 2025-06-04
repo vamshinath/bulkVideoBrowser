@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file
-import os
+import os,shutil
 import humanize
 from pymongo import MongoClient
 mongoClient = MongoClient('mongodb://localhost:27017/')
@@ -45,21 +45,17 @@ def get_videos(directory,sort_by):
         }
         video_files=[]
         cursor = list(db["files"].find(query, {"_id": 1, "filehash": 1, "filefullpath": 1}).sort("filesize", 1))
-        while cursor:
-            video_files.append(cursor.pop(0)['filefullpath'])  # smallest
-            if cursor:
-                video_files.append(cursor.pop(-1)['filefullpath'])  # largest
-
+        
         finalRec=[]
         ctr=0
-        ttl = len(video_files)
+        ttl = len(cursor)
 
         print('total files',ttl)
 
-        for img in tqdm(video_files,total=ttl,unit='vid'):
-            filehash = hasher.hash_file(img)
-            props = db['rootLookup'].find_one({'_id': filehash})
-            if props and props.get('props'):
+        for img in tqdm(cursor,total=ttl,unit='vid'):
+            filepath,filehash = img['filefullpath'],img['filehash']
+            props = db['rootLookup'].find_one({'_id':filehash})
+            if props and props.get('props') and os.path.isfile(props['filefullpath']) and filepath not in ok_videos:
                 width = props['props']['width']
                 height = props['props']['height']
 
@@ -67,10 +63,30 @@ def get_videos(directory,sort_by):
                 videos.append({"path": props['filefullpath'],'ctime':props['filectime'],"size": props['filesize']
                                ,"seconds":props['props']['duration'],
                                "szbydur":round(props['filesize']/max(props['props']['duration'],1),2),
-                               'nsfw_score':props['props']['nsfw_score']
+                               'nsfw_score':0#props['props']['nsfw_score']
                     ,"resolution": resolution,"width": width, "height": height,"sortField":sort_by})
-                
-    if sort_by == "resolution":
+
+
+    if sort_by == "score" and videos:
+        max_duration = max(v["seconds"] for v in videos if v["seconds"]) or 1
+        max_resolution = max(v["width"] * v["height"] for v in videos) or 1
+        max_bitrate = max((v["size"] / max(v["seconds"], 1)) for v in videos) or 1
+
+        for v in videos:
+            duration = v["seconds"]
+            resolution = v["width"] * v["height"]
+            bitrate = v["size"] / max(duration, 1)
+
+            norm_duration = duration / max_duration
+            norm_resolution = resolution / max_resolution
+            norm_bitrate = bitrate / max_bitrate
+
+            # Realistic weights: duration 0.4, resolution 0.4, bitrate 0.2
+            v["score"] = norm_duration * 0.4 + norm_resolution * 0.4 + norm_bitrate * 0.2
+
+        videos.sort(key=lambda x: x["score"], reverse=sort_order)
+
+    elif sort_by == "resolution":
         videos.sort(key=lambda x: (x["width"]* x["height"]),reverse=sort_order)  # Sort by WxH (smallest first)
     elif sort_by == "size":
         videos.sort(key=lambda x: x["size"],reverse=sort_order)
@@ -165,6 +181,21 @@ def delete_video():
         os.remove(video_path)
         return jsonify({"status": "deleted", "new_video": get_next_video(directory)})
     return jsonify({"status": "error"}), 400
+
+
+@app.route('/skip', methods=['POST'])
+def skip_video():
+    global session
+    video_path = request.json.get('video')
+    directory = request.json.get('directory', '')
+    
+    skippedDir = os.path.join(directory,'skipped')
+    if not os.path.isdir(skippedDir):os.mkdir(skippedDir)
+
+    if not os.path.isfile(skippedDir+"/"+os.path.basename(video_path)):shutil.move(video_path,skippedDir)
+
+    return jsonify({"status": "skipped", "new_video": get_next_video(directory)})
+
 
 def get_next_video(directory):
     """Get the next available video without rescanning the directory."""

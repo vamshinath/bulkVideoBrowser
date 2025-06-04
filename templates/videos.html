@@ -149,6 +149,7 @@
                         <button class="btn btn-delete" onclick="deleteVideo('${video.path}', this)">Delete</button>
                         <span class="video-res">${video.resolution}</span>
                         <span class="video-res">Dur:${video.seconds}</span>
+                        <button class="btn btn-delete" onclick="skipV('${video.path}', this)">Skip</button>
 
                         <span class="video-res">${video[video.sortField]}</span>
                     </div>
@@ -221,6 +222,33 @@
                   alert("Request failed: " + error);
               });
         }
+
+        function skipV(videoPath, btnElement) {
+            if (!btnElement) {
+                console.error("btnElement is undefined in skipV");
+                return;
+            }
+    
+            let videoElement = btnElement.closest('.video-item'); // Find the parent video container
+    
+            fetch('/skip', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ video: videoPath, directory: '{{ directory }}' })
+            }).then(response => response.json())
+              .then(data => { 
+                  if (data.status === "skipped") {
+                      removeAndAddVideo(videoElement, data.new_video);
+                  } else {
+                      alert("Error: " + (data.message || "Could not delete video"));
+                  }
+              })
+              .catch(error => {
+                  console.error("Request failed:", error);
+                  alert("Request failed: " + error);
+              });
+        }
+
     
         function removeAndAddVideo(videoElement, newVideo) {
              if (!videoElement) {
