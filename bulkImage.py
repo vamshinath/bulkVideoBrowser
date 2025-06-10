@@ -59,12 +59,17 @@ def get_images_from_directory(root_dir,sortBy,sort_order,load_last,filter_by):
         print("loaded from json")
         with open(os.path.join(root_dir,"lastLoad.jsonl"), "r", encoding="utf-8") as fl:
             for line in fl:
-                ctr+=1
+                
                 print(ctr)
                 rec = json.loads(line.strip())  # Convert JSON string to dictionary
                 if rec and rec['file'] not in alreadySeen and os.path.isfile(rec['file']) and \
                 rec['file'] not in finalRec and (rec.get('suggestedName','_') == filter_by or filter_by == '_') :
                     finalRec.append(rec)
+                    sName= rec.get('givenName',rec.get('suggestedName','-'))
+                    sNames.append(sName)
+                    ctr+=1
+                
+                if ctr>10000:break
 
 
     else:
