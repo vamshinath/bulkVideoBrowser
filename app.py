@@ -3,7 +3,7 @@ import os,shutil
 import humanize
 from pymongo import MongoClient
 mongoClient = MongoClient('mongodb://localhost:27017/')
-db = mongoClient["filesManager"]
+db = mongoClient["filesLookup"]
 import cv2,json
 from filehash import FileHash
 from tqdm import tqdm
@@ -54,7 +54,7 @@ def get_videos(directory,sort_by):
 
         for img in tqdm(cursor,total=ttl,unit='vid'):
             filepath,filehash = img['filefullpath'],img['filehash']
-            props = db['rootLookup'].find_one({'_id':filehash})
+            props = db['filesLookup'].find_one({'_id':filehash})
             if props and props.get('props') and os.path.isfile(props['filefullpath']) and filepath not in ok_videos:
                 width = props['props']['width']
                 height = props['props']['height']
@@ -65,6 +65,12 @@ def get_videos(directory,sort_by):
                                "szbydur":round(props['filesize']/max(props['props']['duration'],1),2),
                                'nsfw_score':0#props['props']['nsfw_score']
                     ,"resolution": resolution,"width": width, "height": height,"sortField":sort_by})
+            else:
+                videos.append({"path": props['filefullpath'],'ctime':0,"size": os.path.getsize(img['filefullpath'])
+                               ,"seconds":0,
+                               "szbydur":0,
+                               'nsfw_score':0#props['props']['nsfw_score']
+                    ,"resolution": 0,"width": 0, "height": 0,"sortField":sort_by})
 
 
     if sort_by == "score" and videos:

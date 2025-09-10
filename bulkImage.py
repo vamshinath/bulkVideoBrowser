@@ -12,72 +12,104 @@ import logging,cv2,random
 import face_recognition,psutil
 import numpy as np
 from pymongo import MongoClient
-import pickle,time
+import pickle,time,string
 import face_recognition
 from bson.binary import Binary
 from collections import Counter
 mongoClient = MongoClient('mongodb://localhost:27017/')
-db = mongoClient["filesManager"]
+db = mongoClient["filesLookup"]
 mp3_file = '/home/vamshi/mp3.mp3'
 hasher = FileHash('sha256')
 
 
 
 app = Flask(__name__)
+
+# === Config ===
 IMAGES_PER_PAGE = 50
+JSONL_FILE = "lastLoad.jsonl"
+SEEN_FILE = "seen.txt"
+
 root_dir=''
 sNames=[
     '_'
 ]
 
 dbimg = mongoClient["filesLookup"]
+loaded_images_cache = None
+page=0
+
+
+
+units = {"B": 1, "KB": 10 ** 3, "MB": 10 ** 6, "GB": 10 ** 9, "TB": 10 ** 12}
+def parse_size(size):
+    number, unit = [string.strip() for string in size.split()]
+    print(int(float(number)*units[unit]))
+    return int(float(number)*units[unit])
+
+def load_seen(root_dir):
+    """Load seen.txt as set."""
+    seen_path = os.path.join(root_dir, SEEN_FILE)
+    if os.path.isfile(seen_path):
+        with open(seen_path) as f:
+            return {ln.strip() for ln in f}
+    return set()
+
+
+
+
+def write_jsonl(filepath, records):
+    """Append records to JSONL file."""
+    with open(filepath, "a", encoding="utf-8") as f:
+        for rec in records:
+            try:
+                f.write(json.dumps(rec) + "\n")
+            except Exception as e:
+                print('failed:')
+                print(rec)
+
+def stream_jsonl(filepath):
+    """Stream JSONL line by line (generator)."""
+    if not os.path.isfile(filepath):
+        return
+    with open(filepath, "r", encoding="utf-8") as f:
+        for line in f:
+            try:
+                yield json.loads(line)
+            except json.JSONDecodeError:
+                continue
 
 def get_images_from_directory(root_dir,sortBy,sort_order,load_last,filter_by):
 
     print(sortBy,sort_order,load_last,quick_load)
-    alreadySeen = []
-    try:
-        with open(root_dir+"/seen.txt") as fl:
-            for ln in fl:
-                alreadySeen.append(ln[:-1])
-    except Exception as e:
-        alreadySeen=[]
-    finalRec=[]
+    alreadySeen = load_seen(root_dir)
+    finalRec,added = [], set()
 
-    alreadyCalc=set()
-    if os.path.isfile(os.path.join(root_dir,"lastLoad.jsonl")):
-        with open(os.path.join(root_dir,"lastLoad.jsonl"), "r", encoding="utf-8") as fl:
-            for line in fl:
-                rec = json.loads(line.strip())
-                if rec:
-                    try:
-                        alreadyCalc.add(rec['file'])
-                    except Exception as e:
-                        e=0
     if load_last:
         ctr=0
-        print("loaded from json")
-        with open(os.path.join(root_dir,"lastLoad.jsonl"), "r", encoding="utf-8") as fl:
-            for line in fl:
-                
-                print(ctr)
-                rec = json.loads(line.strip())  # Convert JSON string to dictionary
-                if rec and rec['file'] not in alreadySeen and os.path.isfile(rec['file']) and \
-                rec['file'] not in finalRec and (rec.get('suggestedName','_') == filter_by or filter_by == '_') :
-                    finalRec.append(rec)
-                    sName= rec.get('givenName',rec.get('suggestedName','-'))
-                    sNames.append(sName)
-                    ctr+=1
-                
-                if ctr>10000:break
+        print("loading from json")
+        for rec in tqdm(stream_jsonl(os.path.join(root_dir, JSONL_FILE)), desc="Loading JSONL"):
+            if not rec:
+                continue
+            if rec["file"] in alreadySeen or rec["file"] in added:
+                continue
+            if not os.path.isfile(rec["file"]):
+                continue
+            if rec.get("suggestedName", "_") != filter_by and filter_by != "_":
+                continue
 
-
+            finalRec.append(rec)
+            sNames.append(rec.get("givenName", rec.get("suggestedName", "-")))
+            added.add(rec["file"])
+            # if len(finalRec) > 10000:
+            #     break
     else:
         image_files = []
         
         query = {
             "filetype": "image",
-            "isReady": True,
+            "removed": False,
+            "viewed":False,
             "filefullpath": {"$regex": root_dir}
         }
 
@@ -85,13 +117,12 @@ def get_images_from_directory(root_dir,sortBy,sort_order,load_last,filter_by):
         ttl = len(cursor)
 
         print('total files',ttl)
-
+        batch=[]
         for img in tqdm(cursor,total=ttl,unit='img'):
             filehash=img['filehash']
             img = img['filefullpath']
             if not os.path.isfile(img):continue
-            props = db['rootLookup'].find_one({'_id': filehash})
-
+            props = db['filesLookup'].find_one({'_id': filehash})
             if props and props['props']:
                 rec={}
                 try:
@@ -113,7 +144,12 @@ def get_images_from_directory(root_dir,sortBy,sort_order,load_last,filter_by):
                     except Exception as e:
                         rec['skinPer']=0
 
-                    rec['size']=props['filesize']
+                    
+
+                    if type(props["filesize"]) == str:
+                        rec["size"] = parse_size(props["filesize"].upper())
+                    else:rec['size']=props['filesize']
+                    
                     rec['hsize']=humanize.naturalsize(rec['size'])
                     rec['mtime']=props['filemtime']
                     try:
@@ -205,17 +241,41 @@ def get_images_from_directory(root_dir,sortBy,sort_order,load_last,filter_by):
                         rec['exposedScore']=0
                     rec['topExposedLabel']=topExposedLabel.split('_score')[0]+'_'+str(round(topExposedScore,2))
 
-
-
-
                 except Exception as e:
                     print(e,filehash)
+                # try:
+                #     with open(os.path.join(root_dir,"lastLoad.jsonl"),'a',encoding='utf-8') as fl:
+                #         fl.write(json.dumps(rec) + "\n") 
+                # except Exception as e:
+                #     e=0
+            else:
+                w=h=pixels=0
+                try:
+                    with Image.open(img) as imge:
+                        w,h = imge.size
+                        pixels = w*h
+                except Exception as e:e=0
 
-                with open(os.path.join(root_dir,"lastLoad.jsonl"),'a',encoding='utf-8') as fl:
-                    fl.write(json.dumps(rec) + "\n") 
+                size = os.path.getsize(img)
+                rec={"file": img, "w": w, "h": h, "pixels": pixels, "face_area": 0, "skinPer": 0, 
+                "size": size, "hsize": humanize.naturalsize(size), "mtime": props['filemtime'], "nsfw_score": 0, 
+                "scoreAvg": -1, "suggestedName": "-", "exposedScore": 0, "topExposedLabel": "NaN"}
 
+                # with open(os.path.join(root_dir,"lastLoad.jsonl"),'a',encoding='utf-8') as fl:
+                #     fl.write(json.dumps(rec) + "\n")
+            
+            batch.append(rec)
+            if len(batch) >= 100:
+                write_jsonl(os.path.join(root_dir, JSONL_FILE), batch)
+                finalRec.extend(batch)
+                batch.clear()
+        if batch:
+            write_jsonl(os.path.join(root_dir, JSONL_FILE), batch)
+            finalRec.extend(batch)
+            batch.clear()
+        
 
-    preSort = sorted(finalRec,key= lambda x:x.get(sortBy,-1),reverse=sort_order)[:100]
+    preSort = sorted(finalRec,key= lambda x:x.get(sortBy,-1),reverse=sort_order)[:1000]
     finalList=[]
     addedList=set()
     for rec in preSort:
@@ -284,7 +344,7 @@ def index():
 @app.route('/load_images', methods=['GET', 'POST'])
 def load_images():
 
-    global root_dir,quick_load
+    global root_dir,quick_load,loaded_images_cache,page
     directory = request.form.get('directory_path')
     print(list(request.form.items()))
     sort_by = request.form.get('sort_by', 'size') 
@@ -298,17 +358,24 @@ def load_images():
 
 
     root_dir = directory
-    page = int(request.form.get('page', 1))
+    page = page+1#int(request.form.get('page', 1))
+
+    print("page:",page)
 
     if not directory or not os.path.exists(directory):
         return jsonify({'images': [], 'error': 'Invalid directory path'})
 
-    images = get_images_from_directory(directory,sort_by,sort_order,load_last,filter_by)
+    if loaded_images_cache is None:
+        print("first load")
+        loaded_images_cache = get_images_from_directory(
+            directory, sort_by, sort_order, load_last, filter_by
+        )
+
     start_index = (page - 1) * IMAGES_PER_PAGE
     end_index = start_index + IMAGES_PER_PAGE
-    images_on_page = images[start_index:end_index]
+    images_on_page = loaded_images_cache[start_index:end_index]
 
-    return jsonify({'images': images_on_page, 'total_images': len(images)})
+    return jsonify({'images': images_on_page, 'total_images': len(loaded_images_cache)})
 
 @app.route('/serve_image')
 def serve_image():
