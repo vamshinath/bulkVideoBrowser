@@ -31,19 +31,25 @@ def get_videos(directory,sort_by):
             ok_videos = set(line.strip() for line in f.readlines())
 
     if load_last:
+        print("Loading from last load file")
         tmp = json.load(open(lastLoadFile))
         videos=[]
         for rec in tmp:
             if rec['path'] not in ok_videos and os.path.isfile(rec['path']):
                 videos.append(rec)
+        print(f"Loaded {len(videos)} videos after filtering OK list")
     else:
 
         query = {
             "filetype": "video",
             "isReady": True,
-            "filefullpath": {"$regex": directory}
+            "filefullpath": {"$regex": directory},
+            "removed":False
         }
         video_files=[]
+
+        print(query)
+
         cursor = list(db["files"].find(query, {"_id": 1, "filehash": 1, "filefullpath": 1}).sort("filesize", 1))
         
         finalRec=[]
@@ -54,23 +60,31 @@ def get_videos(directory,sort_by):
 
         for img in tqdm(cursor,total=ttl,unit='vid'):
             filepath,filehash = img['filefullpath'],img['filehash']
-            props = db['filesLookup'].find_one({'_id':filehash})
-            if props and props.get('props') and os.path.isfile(props['filefullpath']) and filepath not in ok_videos:
-                width = props['props']['width']
-                height = props['props']['height']
+            props = db['filesLookup'].find_one({'_id':filehash,'filefullpath':filepath})
+            try:
+                if props and props.get('props') and os.path.isfile(props['filefullpath']) and filepath not in ok_videos:
+                    width = props['props']['width']
+                    height = props['props']['height']
 
-                resolution = f"{width}x{height}"
-                videos.append({"path": props['filefullpath'],'ctime':props['filectime'],"size": props['filesize']
-                               ,"seconds":props['props']['duration'],
-                               "szbydur":round(props['filesize']/max(props['props']['duration'],1),2),
-                               'nsfw_score':0#props['props']['nsfw_score']
-                    ,"resolution": resolution,"width": width, "height": height,"sortField":sort_by})
-            else:
-                videos.append({"path": props['filefullpath'],'ctime':0,"size": os.path.getsize(img['filefullpath'])
-                               ,"seconds":0,
-                               "szbydur":0,
-                               'nsfw_score':0#props['props']['nsfw_score']
-                    ,"resolution": 0,"width": 0, "height": 0,"sortField":sort_by})
+                    resolution = f"{width}x{height}"
+                    videos.append({"path": props['filefullpath'],'ctime':props['filectime'],"size": props['filesize']
+                                ,"seconds":props['props']['duration'],
+                                "szbydur":round(props['filesize']/max(props['props']['duration'],1),2),
+                                'nsfw_score':0#props['props']['nsfw_score']
+                        ,"resolution": resolution,"width": width, "height": height,"sortField":sort_by})
+                else:
+                    videos.append({"path": props['filefullpath'],'ctime':0,"size": os.path.getsize(img['filefullpath'])
+                                ,"seconds":0,
+                                "szbydur":0,
+                                'nsfw_score':0#props['props']['nsfw_score']
+                        ,"resolution": 0,"width": 0, "height": 0,"sortField":sort_by})
+            except Exception as e:
+                videos.append({"path":filepath ,'ctime':0,"size": os.path.getsize(img['filefullpath'])
+                                ,"seconds":0,
+                                "szbydur":0,
+                                'nsfw_score':0#props['props']['nsfw_score']
+                        ,"resolution": 0,"width": 0, "height": 0,"sortField":sort_by})
+
 
 
     if sort_by == "score" and videos:

@@ -174,7 +174,7 @@ def get_images_from_directory(root_dir,sortBy,sort_order,load_last,filter_by):
 
                     exposedLabels = ['ARMPITS_EXPOSED_score','EXPOSED_ARMPITS_score',
                          'BELLY_EXPOSED_score','EXPOSED_BELLY_score',
-                         'EXPOSED_BUTTOCKS_score','BUTTOCKS_EXPOSED_score'
+                         'EXPOSED_BUTTOCKS_score','BUTTOCKS_EXPOSED_score',
                          'EXPOSED_BREAST_F_score','FEMALE_BREAST_EXPOSED',
                          'FEMALE_GENITALIA_EXPOSED','EXPOSED_GENITALIA_F'
                          ]
