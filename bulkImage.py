@@ -275,7 +275,7 @@ def get_images_from_directory(root_dir,sortBy,sort_order,load_last,filter_by):
             batch.clear()
         
 
-    preSort = sorted(finalRec,key= lambda x:x.get(sortBy,-1),reverse=sort_order)[:1000]
+    preSort = sorted(finalRec,key= lambda x:x.get(sortBy,-1),reverse=sort_order)
     finalList=[]
     addedList=set()
     for rec in preSort:
