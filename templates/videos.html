@@ -4,294 +4,867 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Video Gallery</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <style>
-        /* Reset and General Styles */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        :root {
+            --bg-primary: #0f0f1a;
+            --bg-secondary: #1a1a2e;
+            --bg-card: #16213e;
+            --bg-card-hover: #1c2a4a;
+            --accent: #6c63ff;
+            --green: #22c55e;
+            --green-dim: rgba(34,197,94,0.12);
+            --red: #ef4444;
+            --red-dim: rgba(239,68,68,0.12);
+            --orange: #f59e0b;
+            --orange-dim: rgba(245,158,11,0.12);
+            --blue: #3b82f6;
+            --blue-dim: rgba(59,130,246,0.12);
+            --text-primary: #e0e0e0;
+            --text-secondary: #8888a0;
+            --text-muted: #555570;
+            --border: #2a2a4a;
+            --border-light: #3a3a5a;
         }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: sans-serif;
-            background-color: #f4f4f4;
-            color: #333;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        /* ── Top Bar ── */
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(15, 15, 26, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border);
+            padding: 10px 24px;
             display: flex;
-            flex-direction: column;
             align-items: center;
-            min-height: 100vh; /* Ensure full viewport height */
-            padding: 20px;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
         }
 
-        h1 {
-            margin-bottom: 20px;
-            text-align: center;
-        }
-        .action-label {
-            font-size: 0.85em;
-            color: #555;
+        .topbar-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
         }
 
-        /* Video Container */
+        .topbar-left .logo {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--accent);
+            white-space: nowrap;
+        }
+
+        .topbar-left .logo i { margin-right: 6px; }
+
+        .stat-pills {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .stat-pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .stat-pill.reviewed { background: var(--blue-dim); color: var(--blue); }
+        .stat-pill.kept { background: var(--green-dim); color: var(--green); }
+        .stat-pill.deleted { background: var(--red-dim); color: var(--red); }
+        .stat-pill.skipped { background: var(--orange-dim); color: var(--orange); }
+        .stat-pill.saved { background: rgba(108,99,255,0.12); color: var(--accent); }
+
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .speed-control select {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+
+        .kbd-hint {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .kbd {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 22px;
+            height: 22px;
+            padding: 0 6px;
+            border-radius: 4px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            font-family: monospace;
+        }
+
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 8px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .back-btn:hover {
+            border-color: var(--accent);
+            color: var(--text-primary);
+        }
+
+        /* ── Video Grid ── */
         .video-container {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); /* Responsive columns */
+            grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
             gap: 20px;
-            width: 95%; /* Take up most of the body width */
-            max-width: 1200px; /* Limit maximum width */
+            padding: 24px;
+            max-width: 1600px;
+            margin: 0 auto;
         }
 
         .video-item {
-            background-color: #fff;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-            overflow: hidden; /* Ensure content doesn't overflow */
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
             display: flex;
             flex-direction: column;
-            max-height: 80vh; /* Limit the maximum height of each video item */
+            transition: transform 0.2s, box-shadow 0.2s, opacity 0.3s;
+            position: relative;
         }
 
-        /* Video Styling */
-        video {
+        .video-item:hover {
+            border-color: var(--border-light);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .video-item.removing {
+            animation: fadeSlideOut 0.35s ease forwards;
+        }
+
+        @keyframes fadeSlideOut {
+            to {
+                opacity: 0;
+                transform: scale(0.95) translateY(-10px);
+            }
+        }
+
+        .video-item.entering {
+            animation: fadeSlideIn 0.35s ease forwards;
+        }
+
+        @keyframes fadeSlideIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95) translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        /* ── Video Player ── */
+        .video-wrapper {
+            position: relative;
+            background: #000;
+        }
+
+        .video-wrapper video {
             width: 100%;
-            display: block; /* Remove extra space below video */
-            max-height: 60vh; /* Limit the maximum height of the video itself */
-            object-fit: contain; /* Prevents stretching */
+            display: block;
+            max-height: 55vh;
+            object-fit: contain;
         }
 
-        /* Video Info and Buttons */
-        .video-info {
-            padding: 10px;
-        }
-
-        .btn-group {
+        .video-overlay-badge {
+            position: absolute;
+            top: 10px;
+            left: 10px;
             display: flex;
-            justify-content: center; /* Center items horizontally */
-            align-items: center;    /* Center items vertically */
-            gap: 10px;             /* Adjust the gap between items to make them closer */
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+
+        .badge-res {
+            background: rgba(59,130,246,0.7);
+            color: white;
+        }
+
+        .badge-dur {
+            background: rgba(34,197,94,0.7);
+            color: white;
+        }
+
+        .badge-size {
+            background: rgba(245,158,11,0.7);
+            color: white;
+        }
+
+        .fullscreen-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            border: none;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            cursor: pointer;
+            font-size: 0.85rem;
+            backdrop-filter: blur(8px);
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .fullscreen-btn:hover { background: rgba(0,0,0,0.8); }
+
+        /* ── Info Bar ── */
+        .video-info {
+            padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .filename {
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+        }
+
+        .filename a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .filename a:hover { color: var(--accent); }
+
+        .meta-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .meta-item i { font-size: 0.7rem; }
+
+        /* ── Action Buttons ── */
+        .action-row {
+            display: flex;
+            gap: 8px;
+            padding: 0 14px 14px;
+        }
+
+        .action-btn {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 10px 0;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .action-btn .shortcut-key {
+            font-size: 0.65rem;
+            padding: 1px 5px;
+            border-radius: 3px;
+            background: rgba(255,255,255,0.08);
+            color: var(--text-muted);
+            margin-left: 2px;
+        }
+
+        .action-btn.ok-btn:hover, .action-btn.ok-btn:focus {
+            background: var(--green-dim);
+            border-color: var(--green);
+            color: var(--green);
+        }
+
+        .action-btn.del-btn:hover, .action-btn.del-btn:focus {
+            background: var(--red-dim);
+            border-color: var(--red);
+            color: var(--red);
+        }
+
+        .action-btn.skip-btn:hover, .action-btn.skip-btn:focus {
+            background: var(--orange-dim);
+            border-color: var(--orange);
+            color: var(--orange);
+        }
+
+        .action-btn:active { transform: scale(0.97); }
+
+        /* ── Toast Notifications ── */
+        .toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column-reverse;
+            gap: 8px;
+        }
+
+        .toast {
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            animation: toastIn 0.3s ease, toastOut 0.3s ease 2.5s forwards;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        .toast.ok { background: var(--green); }
+        .toast.deleted { background: var(--red); }
+        .toast.skipped { background: var(--orange); }
+        .toast.error { background: #7c3aed; }
+
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateY(20px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        @keyframes toastOut {
+            from { opacity: 1; }
+            to { opacity: 0; transform: translateY(-10px); }
+        }
+
+        /* ── Confirm Modal ── */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active { display: flex; }
+
+        .modal-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 28px;
+            max-width: 380px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-box h3 {
+            font-size: 1.1rem;
+            margin-bottom: 8px;
+        }
+
+        .modal-box p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
             margin-bottom: 20px;
         }
 
-        .btn {
-            padding: 8px 12px;
-            border: none;
-            border-radius: 5px;
+        .modal-box .filename-preview {
+            font-size: 0.8rem;
+            color: var(--accent);
+            word-break: break-all;
+            margin-bottom: 20px;
+            padding: 8px;
+            background: var(--bg-secondary);
+            border-radius: 6px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .modal-actions button {
+            flex: 1;
+            padding: 10px;
+            border-radius: 8px;
+            font-weight: 600;
             cursor: pointer;
+            font-size: 0.9rem;
+            transition: transform 0.1s;
+        }
+
+        .modal-actions button:active { transform: scale(0.97); }
+
+        .modal-cancel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+        }
+
+        .modal-confirm-del {
+            background: var(--red);
+            border: none;
             color: white;
-            font-size: 0.9em;
-            transition: opacity 0.2s ease;
         }
 
-        .btn:hover {
-            opacity: 0.8;
+        /* ── Empty State ── */
+        .empty-state {
+            text-align: center;
+            padding: 80px 20px;
+            color: var(--text-muted);
         }
 
-        .btn-ok {
-            background-color: #4CAF50; /* Green */
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 16px;
+            color: var(--border-light);
         }
 
-        .btn-delete {
-            background-color: #f44336; /* Red */
+        .empty-state h2 {
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
         }
 
-        .file-size, .video-res {
-            font-size: 0.85em;
-            color: #777;
-        }
-
-        .action-label {
-            font-size: 0.85em;
-            color: #555;
-        }
-
-
-        /* Media Queries for Responsiveness */
+        /* ── Responsive ── */
         @media (max-width: 600px) {
             .video-container {
-                grid-template-columns: 1fr; /* Single column on small screens */
+                grid-template-columns: 1fr;
+                padding: 12px;
             }
+            .topbar {
+                padding: 8px 12px;
+            }
+            .kbd-hint { display: none; }
+            .stat-pills { gap: 4px; }
+            .stat-pill { padding: 3px 8px; font-size: 0.72rem; }
         }
     </style>
 </head>
 <body>
-    <h1>Video Gallery</h1>
-    <span class="action-label">Total Size: </span>
-    <div class="video-container">
-        
+    <!-- Top Bar -->
+    <div class="topbar">
+        <div class="topbar-left">
+            <a href="/" class="back-btn"><i class="fas fa-arrow-left"></i> Back</a>
+            <span class="logo"><i class="fas fa-film"></i>Video Gallery</span>
+            <div class="stat-pills">
+                <span class="stat-pill reviewed"><i class="fas fa-eye"></i> <span id="statReviewed">0</span> / <span id="statTotal">{{ total_count }}</span></span>
+                <span class="stat-pill kept"><i class="fas fa-check"></i> <span id="statOk">0</span></span>
+                <span class="stat-pill deleted"><i class="fas fa-trash"></i> <span id="statDeleted">0</span></span>
+                <span class="stat-pill skipped"><i class="fas fa-forward"></i> <span id="statSkipped">0</span></span>
+                <span class="stat-pill saved"><i class="fas fa-hard-drive"></i> <span id="statSaved">0 B</span></span>
+            </div>
+        </div>
+        <div class="topbar-right">
+            <div class="speed-control">
+                <i class="fas fa-gauge-high"></i>
+                <select id="globalSpeed" title="Playback speed">
+                    <option value="0.5">0.5×</option>
+                    <option value="1">1×</option>
+                    <option value="1.5" selected>1.5×</option>
+                    <option value="2">2×</option>
+                    <option value="3">3×</option>
+                    <option value="4">4×</option>
+                </select>
+            </div>
+            <div class="kbd-hint">
+                <span><span class="kbd">1</span> OK</span>
+                <span><span class="kbd">2</span> Del</span>
+                <span><span class="kbd">3</span> Skip</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Video Grid -->
+    <div class="video-container" id="videoContainer"></div>
+
+    <!-- Empty State -->
+    <div class="empty-state" id="emptyState" style="display:none;">
+        <i class="fas fa-check-circle"></i>
+        <h2>All done!</h2>
+        <p>No more videos to review in this batch.</p>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-overlay" id="deleteModal">
+        <div class="modal-box">
+            <h3><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i> Delete Video?</h3>
+            <p>This will permanently remove the file from disk.</p>
+            <div class="filename-preview" id="deleteFilename"></div>
+            <div class="modal-actions">
+                <button class="modal-cancel" onclick="closeDeleteModal()">Cancel <span class="kbd" style="margin-left:4px">Esc</span></button>
+                <button class="modal-confirm-del" id="confirmDeleteBtn">Delete <span class="kbd" style="margin-left:4px">Enter</span></button>
+            </div>
+        </div>
     </div>
 
     <script>
+        // ── State ──
         let totalSize = 0;
-        const videoContainer = document.querySelector('.video-container');
-        // Initial population of videos and calculate total size
+        let currentSpeed = 1.5;
+        let pendingDelete = null; // { path, btnElement }
+        const directory = '{{ directory }}';
+        const videoContainer = document.getElementById('videoContainer');
+
+        // ── Initial Load ──
         {% for video in videos %}
-        addVideoItem({{ video | tojson }}); // Pass video data as a JSON object
+        addVideoItem({{ video | tojson }});
         {% endfor %}
+        updateTotalSizeLabel();
+        checkEmpty();
 
-        updateTotalSizeLabel(); // Initial update of the label
-
+        // ── Helpers ──
         function formatFileSize(bytes) {
-            const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
-            if (bytes === 0) return "0 Bytes";
+            const sizes = ["B", "KB", "MB", "GB", "TB"];
+            if (bytes === 0) return "0 B";
             const i = Math.floor(Math.log(bytes) / Math.log(1024));
             return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + " " + sizes[i];
         }
 
+        function formatDuration(seconds) {
+            if (!seconds) return "0s";
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            if (h > 0) return `${h}h ${m}m ${s}s`;
+            if (m > 0) return `${m}m ${s}s`;
+            return `${s}s`;
+        }
+
+        function getFilename(path) {
+            return path.split('/').pop();
+        }
+
+        function escapeAttr(str) {
+            return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        }
+
+        // ── Add Video Card ──
         function addVideoItem(video) {
             const newDiv = document.createElement('div');
-            newDiv.className = "video-item";
-            newDiv.innerHTML = `
-                <div class="video-info">
-                    <div class="btn-group">
-                        <span class="file-size">${formatFileSize(video.size)}</span>
-                        <button class="btn btn-ok" onclick="markOk('${video.path}', this)">OK</button>
-                        
-                        <button class="btn btn-delete" onclick="deleteVideo('${video.path}', this)">Delete</button>
-                        <span class="video-res">${video.resolution}</span>
-                        <span class="video-res">Dur:${video.seconds}</span>
-                        <button class="btn btn-delete" onclick="skipV('${video.path}', this)">Skip</button>
+            newDiv.className = "video-item entering";
+            newDiv.dataset.path = video.path;
+            newDiv.dataset.size = video.size;
 
-                        <span class="video-res">${video[video.sortField]}</span>
+            const sortVal = video[video.sortField];
+            const escapedPath = escapeAttr(video.path);
+
+            newDiv.innerHTML = `
+                <div class="video-wrapper">
+                    <video controls muted loop preload="metadata">
+                        <source src="/serve_video?path=${encodeURIComponent(video.path)}" type="video/mp4">
+                    </video>
+                    <div class="video-overlay-badge">
+                        <span class="badge badge-res"><i class="fas fa-expand"></i> ${video.resolution || 'N/A'}</span>
+                        <span class="badge badge-dur"><i class="fas fa-clock"></i> ${formatDuration(video.seconds)}</span>
+                        <span class="badge badge-size"><i class="fas fa-weight-hanging"></i> ${formatFileSize(video.size)}</span>
+                    </div>
+                    <button class="fullscreen-btn" onclick="toggleFullscreen(this)" title="Fullscreen">
+                        <i class="fas fa-expand"></i>
+                    </button>
+                </div>
+                <div class="video-info">
+                    <div class="filename" title="${video.path}">
+                        <a href="${video.path}" target="_blank"><i class="fas fa-file-video"></i> ${getFilename(video.path)}</a>
+                    </div>
+                    <div class="meta-row">
+                        <span class="meta-item"><i class="fas fa-database"></i> ${formatFileSize(video.szbydur)}/s</span>
+                        ${video.ctime ? `<span class="meta-item"><i class="fas fa-calendar"></i> ${new Date(video.ctime * 1000).toLocaleDateString()}</span>` : ''}
+                        ${sortVal !== undefined ? `<span class="meta-item"><i class="fas fa-sort"></i> ${typeof sortVal === 'number' ? sortVal.toLocaleString() : sortVal}</span>` : ''}
                     </div>
                 </div>
-                <video controls autoplay muted loop>
-                    <source src="/serve_video?path=${encodeURIComponent(video.path)}" type="video/mp4">
-                    Your browser does not support the video tag.
-                </video>
-                <a href=${video.path} target="_blank">url</a>
+                <div class="action-row">
+                    <button class="action-btn ok-btn" onclick="markOk('${escapedPath}', this)" title="Keep this video">
+                        <i class="fas fa-check"></i> OK <span class="shortcut-key">1</span>
+                    </button>
+                    <button class="action-btn del-btn" onclick="confirmDelete('${escapedPath}', this)" title="Delete permanently">
+                        <i class="fas fa-trash"></i> Delete <span class="shortcut-key">2</span>
+                    </button>
+                    <button class="action-btn skip-btn" onclick="skipV('${escapedPath}', this)" title="Move to skipped folder">
+                        <i class="fas fa-forward"></i> Skip <span class="shortcut-key">3</span>
+                    </button>
+                </div>
             `;
             videoContainer.appendChild(newDiv);
             totalSize += parseFloat(video.size);
-        }
-    
-        function updateTotalSizeLabel() {
-            const actionLabels = document.querySelectorAll('.action-label');
-            actionLabels.forEach(label => {
-                label.textContent = `Total Size: ${formatFileSize(totalSize)}`;
+
+            // Setup video element
+            const vid = newDiv.querySelector('video');
+            vid.addEventListener('loadedmetadata', () => {
+                vid.currentTime = vid.duration * 0.15;
+                vid.playbackRate = currentSpeed;
+                vid.play().catch(() => {});
             });
+
+            // Remove entering animation class after it plays
+            setTimeout(() => newDiv.classList.remove('entering'), 400);
         }
 
-        function markOk(videoPath, btnElement) {
-            if (!btnElement) {
-                console.error("btnElement is undefined in markOk");
-                return;
+        function updateTotalSizeLabel() {
+            // No separate label needed — stats bar handles it
+        }
+
+        function checkEmpty() {
+            const items = videoContainer.querySelectorAll('.video-item');
+            document.getElementById('emptyState').style.display = items.length === 0 ? 'block' : 'none';
+        }
+
+        // ── Toast ──
+        function showToast(message, type = 'ok') {
+            const container = document.getElementById('toastContainer');
+            const icons = { ok: 'check-circle', deleted: 'trash', skipped: 'forward', error: 'exclamation-circle' };
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `<i class="fas fa-${icons[type] || 'info-circle'}"></i> ${message}`;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // ── Stats ──
+        function updateStats(stats) {
+            if (!stats) return;
+            document.getElementById('statReviewed').textContent = stats.reviewed;
+            document.getElementById('statOk').textContent = stats.ok;
+            document.getElementById('statDeleted').textContent = stats.deleted;
+            document.getElementById('statSkipped').textContent = stats.skipped;
+            document.getElementById('statSaved').textContent = formatFileSize(stats.size_saved);
+        }
+
+        // ── Delete Confirmation Modal ──
+        function confirmDelete(videoPath, btnElement) {
+            pendingDelete = { path: videoPath, btn: btnElement };
+            document.getElementById('deleteFilename').textContent = getFilename(videoPath);
+            document.getElementById('deleteModal').classList.add('active');
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('deleteModal').classList.remove('active');
+            pendingDelete = null;
+        }
+
+        document.getElementById('confirmDeleteBtn').addEventListener('click', () => {
+            if (pendingDelete) {
+                deleteVideo(pendingDelete.path, pendingDelete.btn);
+                closeDeleteModal();
             }
-    
-            let videoElement = btnElement.closest('.video-item'); // Find the parent video container
-    
+        });
+
+        // ── Fullscreen ──
+        function toggleFullscreen(btn) {
+            const video = btn.closest('.video-wrapper').querySelector('video');
+            if (video.requestFullscreen) video.requestFullscreen();
+            else if (video.webkitRequestFullscreen) video.webkitRequestFullscreen();
+        }
+
+        // ── Speed Control ──
+        document.getElementById('globalSpeed').addEventListener('change', function() {
+            currentSpeed = parseFloat(this.value);
+            document.querySelectorAll('video').forEach(v => v.playbackRate = currentSpeed);
+        });
+
+        // ── Video Remove + Add ──
+        function removeAndAddVideo(videoElement, newVideo, actionType) {
+            if (!videoElement) return;
+
+            const removedSize = parseFloat(videoElement.dataset.size || 0);
+            totalSize -= removedSize;
+
+            videoElement.classList.add('removing');
+            setTimeout(() => {
+                videoElement.remove();
+                if (newVideo) {
+                    addVideoItem(newVideo);
+                }
+                checkEmpty();
+            }, 350);
+        }
+
+        // ── API Actions ──
+        function markOk(videoPath, btnElement) {
+            if (!btnElement) return;
+            let videoElement = btnElement.closest('.video-item');
+            setButtonLoading(btnElement);
+
             fetch('/ok', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ video: videoPath, directory: '{{ directory }}' })
-            }).then(response => response.json())
-              .then(data => { 
+                body: JSON.stringify({ video: videoPath, directory: directory })
+            }).then(r => r.json())
+              .then(data => {
                   if (data.status === "added") {
-                      removeAndAddVideo(videoElement, data.new_video);
+                      removeAndAddVideo(videoElement, data.new_video, 'ok');
+                      showToast('Marked as OK', 'ok');
+                      updateStats(data.stats);
                   } else {
-                      alert("Error: " + (data.message || "Could not mark as OK"));
+                      showToast('Error: ' + (data.message || 'Failed'), 'error');
                   }
               })
-              .catch(error => {
-                  console.error("Request failed:", error);
-                  alert("Request failed: " + error);
-              });
+              .catch(err => showToast('Request failed', 'error'));
         }
-    
+
         function deleteVideo(videoPath, btnElement) {
-            if (!btnElement) {
-                console.error("btnElement is undefined in deleteVideo");
-                return;
-            }
-    
-            let videoElement = btnElement.closest('.video-item'); // Find the parent video container
-    
+            if (!btnElement) return;
+            let videoElement = btnElement.closest('.video-item');
+            setButtonLoading(btnElement);
+
             fetch('/delete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ video: videoPath, directory: '{{ directory }}' })
-            }).then(response => response.json())
-              .then(data => { 
+                body: JSON.stringify({ video: videoPath, directory: directory })
+            }).then(r => r.json())
+              .then(data => {
                   if (data.status === "deleted") {
-                      removeAndAddVideo(videoElement, data.new_video);
+                      removeAndAddVideo(videoElement, data.new_video, 'deleted');
+                      showToast('Deleted permanently', 'deleted');
+                      updateStats(data.stats);
                   } else {
-                      alert("Error: " + (data.message || "Could not delete video"));
+                      showToast('Error: ' + (data.message || 'Failed'), 'error');
                   }
               })
-              .catch(error => {
-                  console.error("Request failed:", error);
-                  alert("Request failed: " + error);
-              });
+              .catch(err => showToast('Request failed', 'error'));
         }
 
         function skipV(videoPath, btnElement) {
-            if (!btnElement) {
-                console.error("btnElement is undefined in skipV");
-                return;
-            }
-    
-            let videoElement = btnElement.closest('.video-item'); // Find the parent video container
-    
+            if (!btnElement) return;
+            let videoElement = btnElement.closest('.video-item');
+            setButtonLoading(btnElement);
+
             fetch('/skip', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ video: videoPath, directory: '{{ directory }}' })
-            }).then(response => response.json())
-              .then(data => { 
+                body: JSON.stringify({ video: videoPath, directory: directory })
+            }).then(r => r.json())
+              .then(data => {
                   if (data.status === "skipped") {
-                      removeAndAddVideo(videoElement, data.new_video);
+                      removeAndAddVideo(videoElement, data.new_video, 'skipped');
+                      showToast('Moved to skipped', 'skipped');
+                      updateStats(data.stats);
                   } else {
-                      alert("Error: " + (data.message || "Could not delete video"));
+                      showToast('Error: ' + (data.message || 'Failed'), 'error');
                   }
               })
-              .catch(error => {
-                  console.error("Request failed:", error);
-                  alert("Request failed: " + error);
-              });
+              .catch(err => showToast('Request failed', 'error'));
         }
 
-    
-        function removeAndAddVideo(videoElement, newVideo) {
-             if (!videoElement) {
-                console.error("videoElement is undefined in removeAndAddVideo");
+        function setButtonLoading(btn) {
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+        }
+
+        // ── Keyboard Shortcuts ──
+        document.addEventListener('keydown', function(e) {
+            // Don't trigger if modal is open (except Escape / Enter)
+            const modalOpen = document.getElementById('deleteModal').classList.contains('active');
+
+            if (modalOpen) {
+                if (e.key === 'Escape') closeDeleteModal();
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    document.getElementById('confirmDeleteBtn').click();
+                }
                 return;
             }
-            
-            // Get size of the video about to be removed
-            // let fileSizeSpan = videoElement.querySelector('.file-size');
-            // let sizeToRemove = 0;
-            // if (fileSizeSpan) {
-            //     sizeToRemove = parseFloat(fileSizeSpan.textContent);
-            // }
 
-            // Remove the current video from the UI
-            videoElement.remove();
-              // Update totalSize by subtracting the removed video's size
-            //totalSize += sizeToRemove;
-           
-    
-            if (newVideo) {
-                
-                addVideoItem(newVideo)
-                
+            // Ignore if focus is in an input/select
+            if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+
+            const firstItem = videoContainer.querySelector('.video-item');
+            if (!firstItem) return;
+
+            const path = firstItem.dataset.path;
+
+            if (e.key === '1') {
+                const btn = firstItem.querySelector('.ok-btn');
+                markOk(path, btn);
+            } else if (e.key === '2') {
+                const btn = firstItem.querySelector('.del-btn');
+                confirmDelete(path, btn);
+            } else if (e.key === '3') {
+                const btn = firstItem.querySelector('.skip-btn');
+                skipV(path, btn);
             }
-            updateTotalSizeLabel()
-            document.querySelectorAll("video").forEach(video => {
-                video.addEventListener("loadedmetadata", function () {
-                    video.currentTime = video.duration *0.15; // Start from midway
-                    video.playbackRate = 1.5;
-                });
-            });
-           
-        }
-        document.addEventListener("DOMContentLoaded", function () {
-            document.querySelectorAll("video").forEach(video => {
-                video.addEventListener("loadedmetadata", function () {
-                    video.currentTime = video.duration *0.15; // Start from midway
-                    video.playbackRate = 1.5;
-                });
-            });
         });
     </script>
-
 </body>
 </html>

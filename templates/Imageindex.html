@@ -5,218 +5,676 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Image Manager</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <style>
+        :root { --grid-cols: 3; --gap: 6px; }
+        * { box-sizing: border-box; }
+        body { background: #111; color: #eee; font-family: system-ui, sans-serif; margin: 0; }
+
+        /* ── Control panel ── */
+        #control-panel {
+            background: #1a1a2e; border-bottom: 1px solid #333;
+            padding: 12px 16px; position: sticky; top: 0; z-index: 100;
+        }
+        #control-panel .form-label { font-size: 0.78rem; color: #aaa; margin-bottom: 2px; }
+        #control-panel .form-control,
+        #control-panel .form-select { background: #16213e; color: #eee; border-color: #333; font-size: 0.85rem; }
+        #control-panel .form-check-label { font-size: 0.82rem; }
+
+        /* ── Stats bar ── */
+        #stats-bar {
+            background: #16213e; padding: 6px 16px; font-size: 0.8rem; color: #8899aa;
+            display: flex; justify-content: space-between; align-items: center;
+            position: sticky; top: 72px; z-index: 99; border-bottom: 1px solid #222;
+        }
+        #stats-bar .badge { font-size: 0.72rem; }
+
+        /* ── Image grid ── */
         #image-container {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
+            display: grid;
+            grid-template-columns: repeat(var(--grid-cols), 1fr);
+            gap: var(--gap); padding: var(--gap);
         }
         .image-wrapper {
-            position: relative;
-            width: 50%;
-            padding: 5px;
+            position: relative; background: #1a1a2e; border-radius: 6px;
+            overflow: hidden; transition: transform 0.15s, box-shadow 0.15s;
         }
-        img {
-            width: 100%;
-            height: auto;
-            object-fit: contain;
+        .image-wrapper:hover { transform: scale(1.01); box-shadow: 0 0 12px rgba(0,150,255,0.3); }
+        .image-wrapper.selected { outline: 3px solid #0d6efd; outline-offset: -3px; }
+        .image-wrapper img {
+            width: 100%; display: block; cursor: pointer;
+            aspect-ratio: auto; object-fit: contain; background: #000;
         }
-        .action-btn {
-            position: absolute;
-            top: 10px;
-            font-size: 0.75rem;
-            padding: 5px;
-            border-radius: 5px;
-            color: white;
-            cursor: pointer;
-        }
-        .keep-btn { left: 20%; background-color: green; }
-        .delete-btn { left: 40%; background-color: red; }
-        .move-btn { left: 60%; background-color: orange; }
-        .info-btn { left: 80%; background-color: blue; }
 
+        /* ── Overlay actions ── */
+        .img-overlay {
+            position: absolute; top: 0; left: 0; right: 0;
+            display: flex; gap: 4px; padding: 5px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent);
+            opacity: 0; transition: opacity 0.2s;
+        }
+        .image-wrapper:hover .img-overlay { opacity: 1; }
+        .img-overlay .btn { font-size: 0.65rem; padding: 2px 6px; }
+
+        /* ── Bottom info strip ── */
+        .img-info {
+            font-size: 0.65rem; color: #999; padding: 3px 6px;
+            background: rgba(0,0,0,0.6); white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .img-info .badge { font-size: 0.6rem; }
+
+        /* ── Lightbox ── */
+        #lightbox {
+            display: none; position: fixed; inset: 0; z-index: 9999;
+            background: rgba(0,0,0,0.95); justify-content: center; align-items: center;
+            flex-direction: column;
+        }
+        #lightbox.active { display: flex; }
+        #lightbox img { max-width: 95vw; max-height: 85vh; object-fit: contain; }
+        #lightbox .lb-close {
+            position: absolute; top: 12px; right: 18px;
+            font-size: 1.8rem; color: white; cursor: pointer; z-index: 10;
+        }
+        #lightbox .lb-info { color: #aaa; font-size: 0.82rem; margin-top: 8px; text-align: center; max-width: 90vw; }
+        #lightbox .lb-actions { margin-top: 8px; display: flex; gap: 8px; }
+
+        /* ── Toast ── */
+        #toast-container {
+            position: fixed; bottom: 20px; right: 20px; z-index: 10000;
+            display: flex; flex-direction: column; gap: 6px;
+        }
+        .toast-msg {
+            padding: 8px 16px; border-radius: 6px; color: #fff; font-size: 0.82rem;
+            animation: fadeInOut 2.5s forwards; box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        }
+        .toast-success { background: #198754; }
+        .toast-error { background: #dc3545; }
+        .toast-info { background: #0d6efd; }
+        @keyframes fadeInOut {
+            0%   { opacity: 0; transform: translateY(10px); }
+            10%  { opacity: 1; transform: translateY(0); }
+            80%  { opacity: 1; }
+            100% { opacity: 0; transform: translateY(-10px); }
+        }
+
+        /* ── Loading spinner ── */
+        #loading-overlay {
+            display: none; position: fixed; inset: 0; z-index: 9998;
+            background: rgba(0,0,0,0.6); justify-content: center; align-items: center;
+        }
+        #loading-overlay.active { display: flex; }
+        .spinner-ring {
+            width: 50px; height: 50px; border: 4px solid #333;
+            border-top-color: #0d6efd; border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Pagination ── */
+        #pagination-controls {
+            position: sticky; bottom: 0; background: #1a1a2e;
+            padding: 8px 16px; border-top: 1px solid #333; z-index: 99;
+        }
+
+        /* ── Responsive ── */
         @media (max-width: 768px) {
-            .image-wrapper { width: 50%; }
+            :root { --grid-cols: 2; }
+            #control-panel .row > div { margin-bottom: 6px; }
         }
-
-        @media (max-width: 480px) {
-            .image-wrapper { width: 100%; }
-        }
+        @media (max-width: 480px) { :root { --grid-cols: 1; } }
     </style>
 </head>
 <body>
 
-<div class="container mt-5">
-    <h1 class="text-center">Image Manager</h1>
-    <form id="directory-form" method="POST">
-        <div class="mb-3">
-            <label for="directory_path" class="form-label">Enter Directory Path</label>
-            <input type="text" class="form-control" id="directory_path" name="directory_path" required>
-        </div>
-        <div class="mb-3">
-            <label for="sort_by" class="form-label">Sort Videos By:</label>
-            <select name="sort_by" class="form-select" id="sortSelect">
-                {% for value, label in sort_fields %}
+<!-- ════ CONTROL PANEL ════ -->
+<div id="control-panel">
+    <form id="directory-form" autocomplete="off">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">Directory Path</label>
+                <input type="text" class="form-control form-control-sm" id="directory_path"
+                       placeholder="/path/to/images" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Sort By</label>
+                <select class="form-select form-select-sm" id="sortSelect">
+                    {% for value, label in sort_fields %}
                     <option value="{{ value }}">{{ label }}</option>
-                {% endfor %}
-            </select>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Filter By</label>
+                <select class="form-select form-select-sm" id="filter_by">
+                    <option value="_" selected>All</option>
+                    {% for value, crt in sNames %}
+                    <option value="{{ value }}">{{ value }} ({{ crt }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3 d-flex gap-3 align-items-center flex-wrap">
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="sort_order" value="asc" id="sortAsc">
+                    <label class="form-check-label" for="sortAsc">Asc</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="sort_order" value="desc" id="sortDesc" checked>
+                    <label class="form-check-label" for="sortDesc">Desc</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" id="loadLast">
+                    <label class="form-check-label" for="loadLast">Load Last</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" id="quickLoad">
+                    <label class="form-check-label" for="quickLoad">Quick</label>
+                </div>
+            </div>
+            <div class="col-md-2 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm flex-fill">
+                    <i class="bi bi-folder2-open"></i> Load
+                </button>
+                <button type="button" class="btn btn-outline-warning btn-sm" id="btn-reset-cache"
+                        title="Clear cache &amp; reload">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+            </div>
         </div>
-        <div class="mb-3">
-            <label for="filter_by" class="form-label">filter By:</label>
-            <select name="filter_by" class="form-select" id="filter_by">
-                {% for value,crt in sNames %}
-                    <option value="{{ value }}">{{ value }}-{{crt}}</option>
-                {% endfor %}
-                <option value="_" selected>All</option>
-            </select>
-        </div>
-        <div class="mb-3">
-            <label class="form-label">Sort Order:</label>
-            <div class="form-check">
-                <input class="form-check-input" type="radio" name="sort_order" value="asc" id="sortAsc" >
-                <label class="form-check-label" for="sortAsc">Ascending</label>
-            </div>
-            <div class="form-check">
-                <input class="form-check-input" type="radio" name="sort_order" value="desc" id="sortDesc" checked>
-                <label class="form-check-label" for="sortDesc">Descending</label>
-            </div>
-            <div class="mb-3 form-check">
-                <input class="form-check-inputc" type="checkbox" name="loadLast" id="loadLast" >
-                <label class="form-check-label" for="loadLast">Load Last</label>
-            </div>
-            <div class="mb-3 form-check">
-                <input class="form-check-inputq" type="checkbox" name="quickLoad" id="quickLoad" >
-                <label class="form-check-label" for="quickLoad">Quick Load</label>
-            </div>
-        <button type="submit" class="btn btn-primary">Load Images</button>
     </form>
+</div>
 
-    <div id="image-container" class="mt-5"></div>
-
-    <div id="pagination-controls" class="d-flex justify-content-between mt-3">
-        <button id="prev-page" class="btn btn-secondary" disabled>Previous</button>
-        <button id="next-page" class="btn btn-secondary">Next</button>
+<!-- ════ STATS BAR ════ -->
+<div id="stats-bar">
+    <div>
+        <span id="stat-total">0</span> images &middot;
+        Page <span id="stat-page">0</span>/<span id="stat-pages">0</span>
+        &middot; <span id="stat-selected">0</span> selected
+    </div>
+    <div class="d-flex align-items-center gap-3">
+        <div class="btn-group btn-group-sm" id="bulk-actions" style="display:none;">
+            <button class="btn btn-outline-success btn-sm" id="bulk-keep" title="Keep selected">
+                <i class="bi bi-heart-fill"></i> Keep
+            </button>
+            <button class="btn btn-outline-danger btn-sm" id="bulk-delete" title="Delete selected">
+                <i class="bi bi-trash-fill"></i> Del
+            </button>
+            <button class="btn btn-outline-warning btn-sm" id="bulk-move" title="Move selected">
+                <i class="bi bi-arrows-move"></i> Move
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" id="bulk-deselect" title="Clear selection">
+                <i class="bi bi-x-circle"></i>
+            </button>
+        </div>
+        <div class="d-flex align-items-center gap-1">
+            <i class="bi bi-grid-3x3-gap" style="font-size:0.9rem"></i>
+            <input type="range" id="grid-slider" min="1" max="6" value="3"
+                   class="form-range form-range-sm" style="width:100px">
+            <span id="grid-label" class="text-nowrap" style="font-size:0.75rem">3 col</span>
+        </div>
+        <span class="text-muted" style="font-size:0.7rem"
+              title="Keys: ←→ pages, D delete, K keep, M move, A select-all, X deselect, Esc close">
+            <i class="bi bi-keyboard"></i> Keys
+        </span>
     </div>
 </div>
 
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<!-- ════ IMAGE GRID ════ -->
+<div id="image-container"></div>
+
+<!-- ════ PAGINATION ════ -->
+<div id="pagination-controls" class="d-flex justify-content-between align-items-center">
+    <button id="prev-page" class="btn btn-outline-light btn-sm" disabled>
+        <i class="bi bi-chevron-left"></i> Prev
+    </button>
+    <span class="text-muted" style="font-size:0.82rem">
+        Page <span id="page-display">0</span> / <span id="pages-display">0</span>
+    </span>
+    <button id="next-page" class="btn btn-outline-light btn-sm">
+        Next <i class="bi bi-chevron-right"></i>
+    </button>
+</div>
+
+<!-- ════ LIGHTBOX ════ -->
+<div id="lightbox">
+    <span class="lb-close" title="Close (Esc)">&times;</span>
+    <img id="lb-img" src="" alt="Preview">
+    <div class="lb-info" id="lb-info"></div>
+    <div class="lb-actions">
+        <button class="btn btn-success btn-sm" id="lb-keep"><i class="bi bi-heart-fill"></i> Keep</button>
+        <button class="btn btn-danger btn-sm" id="lb-delete"><i class="bi bi-trash"></i> Delete</button>
+        <button class="btn btn-warning btn-sm" id="lb-move"><i class="bi bi-arrows-move"></i> Move</button>
+        <button class="btn btn-info btn-sm" id="lb-analyze" title="Extract full props">
+            <i class="bi bi-cpu"></i> Analyze
+        </button>
+        <button class="btn btn-outline-light btn-sm" id="lb-prev"><i class="bi bi-chevron-left"></i></button>
+        <button class="btn btn-outline-light btn-sm" id="lb-next"><i class="bi bi-chevron-right"></i></button>
+    </div>
+</div>
+
+<!-- ════ LOADING OVERLAY ════ -->
+<div id="loading-overlay"><div class="spinner-ring"></div></div>
+
+<!-- ════ TOAST CONTAINER ════ -->
+<div id="toast-container"></div>
+
+<!-- ════════════════════════════════════════
+     JAVASCRIPT
+     ════════════════════════════════════════ -->
 <script>
-    let currentPage = 1;
-    let totalImages = 0;
+(function() {
+    "use strict";
 
-    function loadImages(page = 1) {
-        const directory = $("#directory_path").val();
-        var tsort_by = document.getElementById("sortSelect");
-        var tfilter_by = document.getElementById("filter_by");
+    /* ── State ── */
+    let currentPage = 0, totalImages = 0;
+    const perPage   = 50;
+    let pageImages  = [];
+    let selectedSet = new Set();
+    let lightboxIdx = -1;
 
-        var sort_by = tsort_by.options[tsort_by.selectedIndex].value;
-        var filter_by = tfilter_by.options[tfilter_by.selectedIndex].value;
+    /* ── Helpers ── */
+    const qsel  = (s, c) => (c || document).querySelector(s);
+    const qall  = (s, c) => [...(c || document).querySelectorAll(s)];
+    const byId  = id => document.getElementById(id);
 
-        const sort_order = document.querySelector('input[name="sort_order"]:checked').value
-        const loadLast = document.querySelector('.form-check-inputc').checked;
-        const quickLoad = document.querySelector('.form-check-inputq').checked;
+    function toast(msg, type) {
+        type = type || 'info';
+        var el = document.createElement('div');
+        el.className = 'toast-msg toast-' + type;
+        el.textContent = msg;
+        byId('toast-container').appendChild(el);
+        setTimeout(function() { el.remove(); }, 2700);
+    }
 
+    function showLoading() { byId('loading-overlay').classList.add('active'); }
+    function hideLoading() { byId('loading-overlay').classList.remove('active'); }
 
-        if (!directory) return;
+    function updateStats() {
+        var pages = Math.ceil(totalImages / perPage) || 0;
+        byId('stat-total').textContent   = totalImages;
+        byId('stat-page').textContent    = currentPage;
+        byId('stat-pages').textContent   = pages;
+        byId('page-display').textContent = currentPage;
+        byId('pages-display').textContent= pages;
+        byId('stat-selected').textContent= selectedSet.size;
+        byId('bulk-actions').style.display = selectedSet.size > 0 ? 'inline-flex' : 'none';
+        byId('prev-page').disabled = currentPage <= 1;
+        byId('next-page').disabled = currentPage * perPage >= totalImages;
+    }
 
-        $.ajax({
-            url: '/load_images',
+    function scrollToTop() { byId('image-container').scrollIntoView({ behavior: 'smooth' }); }
+
+    function esc(s) {
+        var d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+
+    /* ── Grid slider ── */
+    byId('grid-slider').addEventListener('input', function() {
+        document.documentElement.style.setProperty('--grid-cols', this.value);
+        byId('grid-label').textContent = this.value + ' col';
+    });
+
+    /* ══════════════════════════════════════════
+       LOAD IMAGES
+       ══════════════════════════════════════════ */
+    function loadImages(page) {
+        var dir    = byId('directory_path').value.trim();
+        var sortBy = byId('sortSelect').value;
+        var filterBy = byId('filter_by').value;
+        var order  = qsel('input[name="sort_order"]:checked').value;
+        var loadLast = byId('loadLast').checked;
+        var quick    = byId('quickLoad').checked;
+
+        if (!dir) { toast('Enter a directory path', 'error'); return; }
+        showLoading();
+
+        var body = new URLSearchParams({
+            directory_path: dir, page: page, sort_by: sortBy,
+            sort_order: order, loadLast: loadLast, quickLoad: quick, filter_by: filterBy
+        });
+
+        fetch('/load_images', {
             method: 'POST',
-            data: { directory_path: directory, page: page,sort_by:sort_by,sort_order:sort_order,loadLast:loadLast,quickLoad:quickLoad,filter_by:filter_by},
-            success: function(response) {
-                if (response.images.length === 0) {
-                    alert("No more images.");
-                    return;
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            hideLoading();
+            if (data.error) { toast(data.error, 'error'); return; }
+            if (!data.images || data.images.length === 0) { toast('No more images', 'info'); return; }
+            currentPage = page;
+            totalImages = data.total_images;
+            pageImages  = data.images;
+            selectedSet.clear();
+            renderGrid();
+            updateStats();
+            scrollToTop();
+        })
+        .catch(function(err) {
+            hideLoading();
+            toast('Network error: ' + err.message, 'error');
+        });
+    }
+
+    /* ══════════════════════════════════════════
+       RENDER GRID
+       ══════════════════════════════════════════ */
+    function renderGrid() {
+        var container = byId('image-container');
+        container.innerHTML = '';
+
+        pageImages.forEach(function(img, idx) {
+            var path     = img[0];
+            var dims     = img[1];
+            var faceArea = img[2];
+            var hsize    = img[3];
+            var skinPer  = img[4];
+            var nsfw     = img[5];
+            var exposed  = img[6];
+            var scoreAvg = img[7];
+            var encoded  = encodeURIComponent(path);
+            var shortName= path.split('/').pop();
+
+            var nsfwBadge = 'bg-secondary';
+            if (nsfw > 0.7) nsfwBadge = 'bg-danger';
+            else if (nsfw > 0.4) nsfwBadge = 'bg-warning text-dark';
+            else if (nsfw > 0.1) nsfwBadge = 'bg-info text-dark';
+
+            var wrapper = document.createElement('div');
+            wrapper.className = 'image-wrapper';
+            wrapper.dataset.idx  = idx;
+            wrapper.dataset.path = path;
+            wrapper.innerHTML =
+                '<img src="/serve_image?image_path=' + encoded + '" alt="' + esc(shortName) + '" loading="lazy" data-idx="' + idx + '">' +
+                '<div class="img-overlay">' +
+                    '<button class="btn btn-success btn-sm act-keep" data-path="' + esc(path) + '" title="Keep (K)"><i class="bi bi-heart-fill"></i></button>' +
+                    '<button class="btn btn-danger btn-sm act-delete" data-path="' + esc(path) + '" title="Delete (D)"><i class="bi bi-trash"></i></button>' +
+                    '<button class="btn btn-warning btn-sm act-move" data-path="' + esc(path) + '" title="Move (M)"><i class="bi bi-arrows-move"></i></button>' +
+                    '<button class="btn btn-info btn-sm act-analyze" data-path="' + esc(path) + '" title="Analyze"><i class="bi bi-cpu"></i></button>' +
+                    '<button class="btn btn-outline-light btn-sm act-select" data-idx="' + idx + '" title="Select"><i class="bi bi-check2-square"></i></button>' +
+                '</div>' +
+                '<div class="img-info">' +
+                    '<span class="badge ' + nsfwBadge + '">NSFW ' + (typeof nsfw === "number" ? nsfw.toFixed(2) : nsfw) + '</span> ' +
+                    '<span class="badge bg-secondary">' + esc(dims) + '</span> ' +
+                    '<span class="badge bg-secondary">' + esc(String(hsize)) + '</span> ' +
+                    '<span class="badge bg-dark">FA:' + faceArea + ' SK:' + (typeof skinPer === "number" ? skinPer.toFixed(1) : skinPer) + '%</span> ' +
+                    '<span class="badge bg-dark">' + esc(String(exposed)) + '</span> ' +
+                    '<span class="badge bg-dark">Avg:' + scoreAvg + '</span>' +
+                '</div>';
+            container.appendChild(wrapper);
+        });
+    }
+
+    /* ══════════════════════════════════════════
+       ACTIONS
+       ══════════════════════════════════════════ */
+    function doAction(path, endpoint, actionName) {
+        var wrapper = qsel('.image-wrapper[data-path="' + CSS.escape(path) + '"]');
+        if (wrapper) wrapper.style.opacity = '0.3';
+
+        fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ image_name: path })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                if (wrapper) wrapper.remove();
+                selectedSet.delete(path);
+                toast(actionName + ': ' + path.split('/').pop(), 'success');
+                updateStats();
+            } else {
+                if (wrapper) wrapper.style.opacity = '1';
+                toast('Failed: ' + (data.error || ''), 'error');
+            }
+        })
+        .catch(function(err) {
+            if (wrapper) wrapper.style.opacity = '1';
+            toast('Error: ' + err.message, 'error');
+        });
+    }
+
+    function doAnalyze(path, callback) {
+        toast('Analyzing…', 'info');
+        fetch('/extract_props', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ image_path: path })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success && data.props) {
+                var p = data.props;
+                var info = p.w + 'x' + p.h + ' | ' + p.hsize + ' | NSFW:' + p.nsfw_score +
+                           ' | FA:' + p.face_area + ' | SK:' + p.skinPer + '% | ' +
+                           p.topExposedLabel + ' | Avg:' + p.scoreAvg;
+                toast('Analysis complete', 'success');
+                if (callback) callback(info, p);
+            } else {
+                toast('Analysis failed: ' + (data.error || 'unknown'), 'error');
+            }
+        })
+        .catch(function(err) { toast('Analyze error: ' + err.message, 'error'); });
+    }
+
+    /* ── Event delegation ── */
+    byId('image-container').addEventListener('click', function(e) {
+        var btn = e.target.closest('button');
+        if (btn) {
+            e.stopPropagation();
+            var path = btn.dataset.path;
+            if (btn.classList.contains('act-keep'))   return doAction(path, '/keep_image', 'Kept');
+            if (btn.classList.contains('act-delete')) {
+                if (!confirm('Delete this image permanently?')) return;
+                return doAction(path, '/delete_image', 'Deleted');
+            }
+            if (btn.classList.contains('act-move'))    return doAction(path, '/move_image', 'Moved');
+            if (btn.classList.contains('act-analyze')) return doAnalyze(path);
+            if (btn.classList.contains('act-select'))  return toggleSelect(parseInt(btn.dataset.idx));
+        }
+        var img = e.target.closest('img');
+        if (img && img.dataset.idx !== undefined) openLightbox(parseInt(img.dataset.idx));
+    });
+
+    /* ── Selection ── */
+    function toggleSelect(idx) {
+        var path = pageImages[idx] && pageImages[idx][0];
+        if (!path) return;
+        var wrapper = qsel('.image-wrapper[data-idx="' + idx + '"]');
+        if (selectedSet.has(path)) {
+            selectedSet.delete(path);
+            if (wrapper) wrapper.classList.remove('selected');
+        } else {
+            selectedSet.add(path);
+            if (wrapper) wrapper.classList.add('selected');
+        }
+        updateStats();
+    }
+
+    function selectAll() {
+        pageImages.forEach(function(img, idx) {
+            selectedSet.add(img[0]);
+            var w = qsel('.image-wrapper[data-idx="' + idx + '"]');
+            if (w) w.classList.add('selected');
+        });
+        updateStats();
+    }
+
+    function deselectAll() {
+        selectedSet.clear();
+        qall('.image-wrapper.selected').forEach(function(w) { w.classList.remove('selected'); });
+        updateStats();
+    }
+
+    /* ── Bulk actions ── */
+    function bulkAction(endpoint, actionName) {
+        if (selectedSet.size === 0) return;
+        var count = selectedSet.size;
+        if (actionName === 'Deleted' && !confirm('Delete ' + count + ' images permanently?')) return;
+
+        var paths = Array.from(selectedSet);
+        var done = 0;
+        showLoading();
+
+        paths.forEach(function(path) {
+            fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ image_name: path })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                done++;
+                if (data.success) {
+                    var w = qsel('.image-wrapper[data-path="' + CSS.escape(path) + '"]');
+                    if (w) w.remove();
+                    selectedSet.delete(path);
                 }
-
-                currentPage = page;
-                totalImages = response.total_images;
-                $('#image-container').empty();
-
-                response.images.forEach(image => {
-                    const imagePath = encodeURIComponent(image[0]);
-                    $('#image-container').append(`
-                        <div class="image-wrapper">
-                            <img src="/serve_image?image_path=${imagePath}" alt="${imagePath}">
-                            <button class="btn action-btn keep-btn" data-path="${image[0]}">Keep ${image[3]}</button>
-                            <button class="btn action-btn delete-btn" data-path="${image[0]}">${image[1]}</button>
-                            <button class="btn action-btn move-btn" data-path="${image[0]}">NSFW:${image[5]} Move</button>
-                            <button class="btn action-btn info-btn">FA:${image[2]} |SK:${image[4]} ${image[6]} ${image[7]} </button>
-                        </div>
-                    `);
-                });
-
-                updatePaginationButtons();
-            },
-            error: function() {
-                alert("Error loading images.");
-            }
+                if (done === paths.length) {
+                    hideLoading();
+                    toast(actionName + ' ' + done + ' images', 'success');
+                    updateStats();
+                }
+            })
+            .catch(function() {
+                done++;
+                if (done === paths.length) { hideLoading(); updateStats(); }
+            });
         });
     }
 
-    // Handle dynamic buttons
-    $(document).on('click', '.keep-btn', function() {
-        const imagePath = $(this).data('path');
-        $(this).closest('.image-wrapper').remove();
-        $.post('/keep_image', { image_name: imagePath }, function(response) {
-            if (response.success) {
-                $(`img[alt='${imagePath}']`).closest('.image-wrapper').remove();
-            } else {
-                alert('Error keep image: ' + response.error);
-            }
-           
-        });
-    });
+    byId('bulk-keep').addEventListener('click',     function() { bulkAction('/keep_image', 'Kept'); });
+    byId('bulk-delete').addEventListener('click',   function() { bulkAction('/delete_image', 'Deleted'); });
+    byId('bulk-move').addEventListener('click',     function() { bulkAction('/move_image', 'Moved'); });
+    byId('bulk-deselect').addEventListener('click', deselectAll);
 
-    $(document).on('click', '.delete-btn', function() {
-        const imagePath = $(this).data('path');
-        $(this).closest('.image-wrapper').remove();
-        $.post('/delete_image', { image_name: imagePath }, function(response) {
-            if (response.success) {
-                $(`img[alt='${imagePath}']`).closest('.image-wrapper').remove();
-            } else {
-                alert('Error deleting image: ' + response.error);
-            }
-           
-        });
-    });
-
-    $(document).on('click', '.move-btn', function() {
-        const imagePath = $(this).data('path');
-        $(this).closest('.image-wrapper').remove();
-        $.post('/move_image', { image_name: imagePath }, function(response) {
-            if (response.success) {
-                $(`img[alt='${imagePath}']`).closest('.image-wrapper').remove();
-            } else {
-                alert('Error moving image: ' + response.error);
-            }
-        });
-    });
-
-    // Pagination Buttons
-    $('#next-page').click(function() {
-        if (currentPage * 50 < totalImages) {
-            loadImages(currentPage + 1);
-        }
-    });
-
-    $('#prev-page').click(function() {
-        if (currentPage > 1) {
-            loadImages(currentPage - 1);
-        }
-    });
-
-    function updatePaginationButtons() {
-        $('#prev-page').prop('disabled', currentPage === 1);
-        $('#next-page').prop('disabled', currentPage * 50 >= totalImages);
+    /* ══════════════════════════════════════════
+       LIGHTBOX
+       ══════════════════════════════════════════ */
+    function openLightbox(idx) {
+        if (idx < 0 || idx >= pageImages.length) return;
+        lightboxIdx = idx;
+        var img  = pageImages[idx];
+        var path = img[0];
+        byId('lb-img').src = '/serve_image?image_path=' + encodeURIComponent(path);
+        byId('lb-info').textContent = path.split('/').pop() +
+            ' — ' + img[1] + ' — ' + img[3] +
+            ' — NSFW:' + img[5] + ' — FA:' + img[2] +
+            ' SK:' + img[4] + '% — ' + img[6] + ' — Avg:' + img[7];
+        byId('lightbox').classList.add('active');
+        byId('lightbox').dataset.path = path;
+        document.body.style.overflow = 'hidden';
     }
 
-    // Form Submission
-    $('#directory-form').submit(function(e) {
+    function closeLightbox() {
+        byId('lightbox').classList.remove('active');
+        document.body.style.overflow = '';
+        lightboxIdx = -1;
+    }
+
+    function lbAdvance() {
+        if (lightboxIdx < pageImages.length - 1) openLightbox(lightboxIdx + 1);
+        else closeLightbox();
+    }
+
+    qsel('.lb-close').addEventListener('click', closeLightbox);
+    byId('lightbox').addEventListener('click', function(e) {
+        if (e.target === this) closeLightbox();
+    });
+
+    byId('lb-prev').addEventListener('click', function() { if (lightboxIdx > 0) openLightbox(lightboxIdx - 1); });
+    byId('lb-next').addEventListener('click', function() { if (lightboxIdx < pageImages.length - 1) openLightbox(lightboxIdx + 1); });
+
+    byId('lb-keep').addEventListener('click', function() {
+        doAction(byId('lightbox').dataset.path, '/keep_image', 'Kept');
+        lbAdvance();
+    });
+    byId('lb-delete').addEventListener('click', function() {
+        if (!confirm('Delete permanently?')) return;
+        doAction(byId('lightbox').dataset.path, '/delete_image', 'Deleted');
+        lbAdvance();
+    });
+    byId('lb-move').addEventListener('click', function() {
+        doAction(byId('lightbox').dataset.path, '/move_image', 'Moved');
+        lbAdvance();
+    });
+    byId('lb-analyze').addEventListener('click', function() {
+        doAnalyze(byId('lightbox').dataset.path, function(info) {
+            byId('lb-info').textContent = info;
+        });
+    });
+
+    /* ── Pagination ── */
+    byId('next-page').addEventListener('click', function() {
+        if (currentPage * perPage < totalImages) loadImages(currentPage + 1);
+    });
+    byId('prev-page').addEventListener('click', function() {
+        if (currentPage > 1) loadImages(currentPage - 1);
+    });
+
+    /* ── Reset cache ── */
+    byId('btn-reset-cache').addEventListener('click', function() {
+        fetch('/reset_cache', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            toast(data.message || 'Cache cleared', 'success');
+            currentPage = 0; totalImages = 0; pageImages = [];
+            byId('image-container').innerHTML = '';
+            updateStats();
+        })
+        .catch(function(err) { toast('Reset failed: ' + err.message, 'error'); });
+    });
+
+    /* ── Form submission ── */
+    byId('directory-form').addEventListener('submit', function(e) {
         e.preventDefault();
-        loadImages(1); // Start at first page
+        fetch('/reset_cache', { method: 'POST' })
+        .then(function() { loadImages(1); })
+        .catch(function() { loadImages(1); });
     });
-</script>
 
+    /* ══════════════════════════════════════════
+       KEYBOARD SHORTCUTS
+       ══════════════════════════════════════════ */
+    document.addEventListener('keydown', function(e) {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+        var lb = byId('lightbox').classList.contains('active');
+
+        switch (e.key) {
+            case 'Escape':
+                if (lb) closeLightbox();
+                break;
+            case 'ArrowLeft':
+                if (lb && lightboxIdx > 0) openLightbox(lightboxIdx - 1);
+                else if (!lb && currentPage > 1) loadImages(currentPage - 1);
+                break;
+            case 'ArrowRight':
+                if (lb && lightboxIdx < pageImages.length - 1) openLightbox(lightboxIdx + 1);
+                else if (!lb && currentPage * perPage < totalImages) loadImages(currentPage + 1);
+                break;
+            case 'd': case 'D':
+                if (lb) { if (confirm('Delete?')) { doAction(byId('lightbox').dataset.path, '/delete_image', 'Deleted'); lbAdvance(); } }
+                break;
+            case 'k': case 'K':
+                if (lb) { doAction(byId('lightbox').dataset.path, '/keep_image', 'Kept'); lbAdvance(); }
+                break;
+            case 'm': case 'M':
+                if (lb) { doAction(byId('lightbox').dataset.path, '/move_image', 'Moved'); lbAdvance(); }
+                break;
+            case 'a': case 'A':
+                if (!lb) { e.preventDefault(); selectAll(); }
+                break;
+            case 'x': case 'X':
+                if (!lb) deselectAll();
+                break;
+        }
+    });
+
+})();
+</script>
 </body>
 </html>

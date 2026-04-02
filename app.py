@@ -3,7 +3,7 @@ import os,shutil
 import humanize
 from pymongo import MongoClient
 mongoClient = MongoClient('mongodb://localhost:27017/')
-db = mongoClient["filesLookup"]
+db = mongoClient["filesLookupUltimate"]
 import cv2,json
 from filehash import FileHash
 from tqdm import tqdm
@@ -13,6 +13,7 @@ sort_by='size'
 session={}
 sizeSaved = 0
 load_last=False
+stats = {"reviewed": 0, "deleted": 0, "ok": 0, "skipped": 0, "size_saved": 0}
 
 def get_videos(directory,sort_by):
     video_exts = {".mp4", ".avi", ".mkv", ".mov", ".flv", ".wmv"}
@@ -32,9 +33,11 @@ def get_videos(directory,sort_by):
 
     if load_last:
         print("Loading from last load file")
+        # add tqdm progress bar here
         tmp = json.load(open(lastLoadFile))
         videos=[]
-        for rec in tmp:
+        sort_order=True
+        for rec in tqdm(tmp, desc="Loading videos", unit="vid"):
             if rec['path'] not in ok_videos and os.path.isfile(rec['path']):
                 videos.append(rec)
         print(f"Loaded {len(videos)} videos after filtering OK list")
@@ -42,7 +45,7 @@ def get_videos(directory,sort_by):
 
         query = {
             "filetype": "video",
-            "isReady": True,
+            #"isReady": True,
             "filefullpath": {"$regex": directory},
             "removed":False
         }
@@ -57,7 +60,6 @@ def get_videos(directory,sort_by):
         ttl = len(cursor)
 
         print('total files',ttl)
-
         for img in tqdm(cursor,total=ttl,unit='vid'):
             filepath,filehash = img['filefullpath'],img['filehash']
             props = db['filesLookup'].find_one({'_id':filehash,'filefullpath':filepath})
@@ -84,7 +86,8 @@ def get_videos(directory,sort_by):
                                 "szbydur":0,
                                 'nsfw_score':0#props['props']['nsfw_score']
                         ,"resolution": 0,"width": 0, "height": 0,"sortField":sort_by})
-
+        with open(lastLoadFile,"w") as fl:
+            json.dump(videos,fl,indent=4)
 
 
     if sort_by == "score" and videos:
@@ -120,8 +123,7 @@ def get_videos(directory,sort_by):
         videos.sort(key=lambda x: x["nsfw_score"],reverse=sort_order)
 
     
-    with open(lastLoadFile,"w") as fl:
-        json.dump(videos,fl,indent=4)
+    
 
     return videos
 
@@ -135,8 +137,9 @@ def serve_video():
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    global sort_by,session,sort_order,load_last
+    global sort_by,session,sort_order,load_last,stats
     session={}
+    stats = {"reviewed": 0, "deleted": 0, "ok": 0, "skipped": 0, "size_saved": 0}
     if request.method == 'POST':
         directory = request.form['directory']
         sort_by = request.form.get('sort_by', 'size')  # Default to 'size' if not provided
@@ -155,14 +158,16 @@ def videos():
         return "Invalid directory path", 400
     video_list = get_videos(directory,sort_by)
 
+    total_count = len(video_list)
     session["videos"] = video_list[2:]
     session["removed_videos"] = set()  # Store removed videos
 
 
-    return render_template('videos.html', videos=video_list[:2], directory=directory)
+    return render_template('videos.html', videos=video_list[:2], directory=directory, total_count=total_count)
 
 @app.route('/ok', methods=['POST'])
 def mark_ok():
+    global stats
     data = request.json
     video_path = data.get('video')
     directory = data.get('directory', '')
@@ -180,15 +185,17 @@ def mark_ok():
         with open(ok_list_path, 'a') as f:
             f.write(video_path + '\n')
 
+        stats["ok"] += 1
+        stats["reviewed"] += 1
         new_video = get_next_video(directory)
-        return jsonify({"status": "added", "new_video": new_video})
+        return jsonify({"status": "added", "new_video": new_video, "stats": stats})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @app.route('/delete', methods=['POST'])
 def delete_video():
-    global session
+    global session, stats
     video_path = request.json.get('video')
     directory = request.json.get('directory', '')
 
@@ -198,14 +205,18 @@ def delete_video():
 
 
     if video_path and os.path.exists(video_path):
+        file_size = os.path.getsize(video_path)
         os.remove(video_path)
-        return jsonify({"status": "deleted", "new_video": get_next_video(directory)})
+        stats["deleted"] += 1
+        stats["reviewed"] += 1
+        stats["size_saved"] += file_size
+        return jsonify({"status": "deleted", "new_video": get_next_video(directory), "stats": stats})
     return jsonify({"status": "error"}), 400
 
 
 @app.route('/skip', methods=['POST'])
 def skip_video():
-    global session
+    global session, stats
     video_path = request.json.get('video')
     directory = request.json.get('directory', '')
     
@@ -214,7 +225,15 @@ def skip_video():
 
     if not os.path.isfile(skippedDir+"/"+os.path.basename(video_path)):shutil.move(video_path,skippedDir)
 
-    return jsonify({"status": "skipped", "new_video": get_next_video(directory)})
+    stats["skipped"] += 1
+    stats["reviewed"] += 1
+    return jsonify({"status": "skipped", "new_video": get_next_video(directory), "stats": stats})
+
+
+@app.route('/stats')
+def get_stats():
+    remaining = len([v for v in session.get("videos", []) if v["path"] not in session.get("removed_videos", set())])
+    return jsonify({**stats, "remaining": remaining})
 
 
 def get_next_video(directory):

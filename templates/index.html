@@ -5,68 +5,293 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Video Manager</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <style>
+        :root {
+            --bg-primary: #0f0f1a;
+            --bg-secondary: #1a1a2e;
+            --bg-card: #16213e;
+            --accent: #6c63ff;
+            --accent-hover: #5a52d5;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0b0;
+            --border: #2a2a4a;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
-            background-color: #f8f9fa;
+            background: var(--bg-primary);
+            background-image: 
+                radial-gradient(ellipse at 20% 50%, rgba(108, 99, 255, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 20%, rgba(108, 99, 255, 0.05) 0%, transparent 50%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            color: var(--text-primary);
         }
-        .container {
-            max-width: 500px;
-            margin-top: 100px;
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
-        }
-        .btn-primary {
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 40px;
             width: 100%;
+            max-width: 480px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+        }
+
+        .card-header {
+            text-align: center;
+            margin-bottom: 32px;
+            background: none;
+            border: none;
+        }
+
+        .card-header .icon {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, var(--accent), #8b5cf6);
+            border-radius: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+            font-size: 24px;
+            color: white;
+        }
+
+        .card-header h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .card-header p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-top: 4px;
+        }
+
+        .form-label {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .form-control, .form-select {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-size: 0.95rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .form-control:focus, .form-select:focus {
+            background: var(--bg-secondary);
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.15);
+            color: var(--text-primary);
+        }
+
+        .form-control::placeholder {
+            color: #555;
+        }
+
+        .form-select option {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+
+        .sort-options {
+            display: flex;
+            gap: 8px;
+        }
+
+        .sort-options .sort-btn {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .sort-options .sort-btn:hover {
+            border-color: var(--accent);
+            color: var(--text-primary);
+        }
+
+        .sort-options .sort-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .sort-options .sort-btn input {
+            display: none;
+        }
+
+        .form-check {
+            padding-left: 0;
+        }
+
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 14px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+        }
+
+        .toggle-row label {
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .form-check-input {
+            width: 44px;
+            height: 22px;
+            background-color: var(--border);
+            border: none;
+            cursor: pointer;
+        }
+
+        .form-check-input:checked {
+            background-color: var(--accent);
+        }
+
+        .form-check-input:focus {
+            box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.2);
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, var(--accent), #8b5cf6);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s;
+            margin-top: 8px;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 25px rgba(108, 99, 255, 0.35);
+        }
+
+        .btn-submit:active {
+            transform: translateY(0);
+        }
+
+        .mb-3 { margin-bottom: 20px; }
+
+        .divider {
+            height: 1px;
+            background: var(--border);
+            margin: 24px 0;
         }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2 class="text-center mb-4">Video Manager</h2>
+<div class="card">
+    <div class="card-header">
+        <div class="icon"><i class="fas fa-film"></i></div>
+        <h2>Video Manager</h2>
+        <p>Browse, triage, and organize your video library</p>
+    </div>
+
     <form method="POST">
         <div class="mb-3">
-            <label for="directory" class="form-label">Enter Directory Path:</label>
-            <input type="text" class="form-control" name="directory" placeholder="e.g., /media/user/videos">
+            <label for="directory" class="form-label">Directory Path</label>
+            <input type="text" class="form-control" name="directory" id="directory" 
+                   placeholder="/media/user/videos" autocomplete="off">
         </div>
 
         <div class="mb-3">
-            <label for="sort_by" class="form-label">Sort Videos By:</label>
-            <select name="sort_by" class="form-select">
-                <option value="size">File Size</option>
-                <option value="resolution">Resolution (WxH)</option>
-                <option value="seconds">Seconds</option>
-                <option value="szbydur">Size by dur</option>
-                <option value="ctime">Ctime</option>
-                <option value="score">Score</option>
-                <option value="nsfw_score">nsfw_score</option>
-
-
+            <label for="sort_by" class="form-label">Sort By</label>
+            <select name="sort_by" class="form-select" id="sort_by">
+                <option value="size">📦 File Size</option>
+                <option value="resolution">📐 Resolution (W×H)</option>
+                <option value="seconds">⏱️ Duration</option>
+                <option value="szbydur">📊 Bitrate (Size/Dur)</option>
+                <option value="ctime">📅 Created Time</option>
+                <option value="score">⭐ Quality Score</option>
+                <option value="nsfw_score">🔞 NSFW Score</option>
             </select>
         </div>
 
         <div class="mb-3">
-            <label class="form-label">Sort Order:</label>
-            <div class="form-check">
-                <input class="form-check-input" type="radio" name="sort_order" value="asc" id="sortAsc" >
-                <label class="form-check-label" for="sortAsc">Ascending</label>
+            <label class="form-label">Sort Order</label>
+            <div class="sort-options">
+                <label class="sort-btn" id="ascBtn">
+                    <input type="radio" name="sort_order" value="asc" id="sortAsc">
+                    <i class="fas fa-arrow-up-short-wide"></i> Ascending
+                </label>
+                <label class="sort-btn active" id="descBtn">
+                    <input type="radio" name="sort_order" value="desc" id="sortDesc" checked>
+                    <i class="fas fa-arrow-down-wide-short"></i> Descending
+                </label>
             </div>
-            <div class="form-check">
-                <input class="form-check-input" type="radio" name="sort_order" value="desc" id="sortDesc" checked>
-                <label class="form-check-label" for="sortDesc">Descending</label>
-            </div>
-            
-        </div>
-        <div class="mb-3 form-check">
-            <input class="form-check-input" type="checkbox" name="loadLast" id="loadLast" checked>
-            <label class="form-check-label" for="loadLast">Load Last</label>
         </div>
 
-        <button type="submit" class="btn btn-primary">Load Videos</button>
+        <div class="divider"></div>
+
+        <div class="mb-3">
+            <div class="toggle-row">
+                <label for="loadLast"><i class="fas fa-history"></i>&nbsp; Resume Last Session</label>
+                <input class="form-check-input" type="checkbox" role="switch" name="loadLast" id="loadLast" checked>
+            </div>
+        </div>
+
+        <button type="submit" class="btn-submit">
+            <i class="fas fa-play"></i>&nbsp; Load Videos
+        </button>
     </form>
 </div>
+
+<script>
+    // Sort order toggle
+    const ascBtn = document.getElementById('ascBtn');
+    const descBtn = document.getElementById('descBtn');
+
+    ascBtn.addEventListener('click', () => {
+        ascBtn.classList.add('active');
+        descBtn.classList.remove('active');
+    });
+    descBtn.addEventListener('click', () => {
+        descBtn.classList.add('active');
+        ascBtn.classList.remove('active');
+    });
+
+    // Persist last used directory in localStorage
+    const dirInput = document.getElementById('directory');
+    const saved = localStorage.getItem('lastDirectory');
+    if (saved) dirInput.value = saved;
+    dirInput.closest('form').addEventListener('submit', () => {
+        localStorage.setItem('lastDirectory', dirInput.value);
+    });
+</script>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
