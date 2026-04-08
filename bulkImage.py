@@ -273,14 +273,12 @@ def get_images_from_directory(root_dir, sort_by, sort_order, load_last, filter_b
 
     if load_last:
         print("Loading from JSONL cache...")
-        for rec in tqdm(stream_jsonl(os.path.join(root_dir, JSONL_FILE)), desc="Loading JSONL"):
-            if not rec:
-                continue
+        for rec in tqdm(stream_jsonl(os.path.join(root_dir, JSONL_FILE)), desc="Loading JSONL", unit="files"):
             filepath = rec["file"]
             if filepath in already_seen or filepath in added:
                 continue
-            if not os.path.isfile(filepath):
-                continue
+            # if not os.path.isfile(filepath):
+            #     continue
             if filter_by != "_" and rec.get("suggestedName", "_") != filter_by:
                 continue
 
@@ -532,6 +530,9 @@ def delete_image():
         return jsonify({'success': False, 'error': 'Access denied'}), 403
 
     try:
+        seen_path = os.path.join(_state["root_dir"], SEEN_FILE)
+        with open(seen_path, 'a') as f:
+            f.write(image_path + "\n")
         os.remove(image_path)
         return jsonify({'success': True})
     except Exception as e:
@@ -553,6 +554,9 @@ def move_image():
 
     try:
         shutil.move(image_path, os.path.join(target_dir, os.path.basename(image_path)))
+        seen_path = os.path.join(root, SEEN_FILE)
+        with open(seen_path, 'a') as f:
+            f.write(image_path + "\n")
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
