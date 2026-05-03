@@ -143,6 +143,39 @@
             display: none;
         }
 
+        .batch-options {
+            display: flex;
+            gap: 8px;
+        }
+
+        .batch-options .sort-btn {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .batch-options .sort-btn:hover {
+            border-color: var(--accent);
+            color: var(--text-primary);
+        }
+
+        .batch-options .sort-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .batch-options .sort-btn input {
+            display: none;
+        }
+
         .form-check {
             padding-left: 0;
         }
@@ -258,9 +291,26 @@
         <div class="divider"></div>
 
         <div class="mb-3">
+            <label class="form-label">Videos Per Batch</label>
+            <div class="batch-options">
+                <label class="sort-btn active"><input type="radio" name="batch_size" value="2" checked> 2</label>
+                <label class="sort-btn"><input type="radio" name="batch_size" value="4"> 4</label>
+                <label class="sort-btn"><input type="radio" name="batch_size" value="6"> 6</label>
+                <label class="sort-btn"><input type="radio" name="batch_size" value="8"> 8</label>
+            </div>
+        </div>
+
+        <div class="mb-3">
             <div class="toggle-row">
                 <label for="loadLast"><i class="fas fa-history"></i>&nbsp; Resume Last Session</label>
                 <input class="form-check-input" type="checkbox" role="switch" name="loadLast" id="loadLast" checked>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <div class="toggle-row">
+                <label for="scanDir"><i class="fas fa-folder-open"></i>&nbsp; Scan Directory (skip DB)</label>
+                <input class="form-check-input" type="checkbox" role="switch" name="scanDir" id="scanDir">
             </div>
         </div>
 
@@ -290,6 +340,20 @@
     if (saved) dirInput.value = saved;
     dirInput.closest('form').addEventListener('submit', () => {
         localStorage.setItem('lastDirectory', dirInput.value);
+    });
+
+    // Make Resume Last and Scan Dir mutually exclusive
+    const loadLast = document.getElementById('loadLast');
+    const scanDir = document.getElementById('scanDir');
+    loadLast.addEventListener('change', () => { if (loadLast.checked) scanDir.checked = false; });
+    scanDir.addEventListener('change', () => { if (scanDir.checked) loadLast.checked = false; });
+
+    // Batch size toggle
+    document.querySelectorAll('.batch-options .sort-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.batch-options .sort-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
     });
 </script>
 

@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import json
 import sys
@@ -11,7 +12,7 @@ from tqdm import tqdm
 from pymongo import MongoClient
 from collections import Counter
 
-Image.MAX_IMAGE_PIXELS = None
+Image.MAX_IMAGE_PIXELS = 200_000_000  # ~200MP — safe limit against decompression bombs
 
 # === Try to import the heavy image processor from fillImageProps_improved ===
 FILL_PROPS_DIR = os.path.expanduser("~/gitRepos/filesLookup")
@@ -239,9 +240,9 @@ def load_seen(root_dir):
 
 
 
-def write_jsonl(filepath, records):
-    """Append records to JSONL file."""
-    with open(filepath, "a", encoding="utf-8") as f:
+def write_jsonl(filepath, records, mode="a"):
+    """Write records to JSONL file. Use mode='w' to truncate first."""
+    with open(filepath, mode, encoding="utf-8") as f:
         for rec in records:
             try:
                 f.write(json.dumps(rec) + "\n")
@@ -260,13 +261,14 @@ def stream_jsonl(filepath):
             except json.JSONDecodeError:
                 continue
 
-def get_images_from_directory(root_dir, sort_by, sort_order, load_last, filter_by, quick_load=False):
+def get_images_from_directory(root_dir, sort_by, sort_order, load_last, filter_by, quick_load=False, scan_dir=False):
     """Load image records from JSONL cache or MongoDB, sort and deduplicate.
 
     Args:
         quick_load: When True, images missing DB props get ultra-fast extraction
                     (dimensions + size only).  When False, full extraction is
                     attempted via EnhancedImageProcessor (NSFW, skin%, face area…).
+        scan_dir: When True, recursively scan directory for images (skip DB).
     """
     already_seen = load_seen(root_dir)
     records, added = [], set()
@@ -286,6 +288,8 @@ def get_images_from_directory(root_dir, sort_by, sort_order, load_last, filter_b
             _state["sNames"].append(rec.get("givenName", rec.get("suggestedName", "-")))
             added.add(filepath)
         print(f"Loaded {len(records)} records from JSONL")
+    elif scan_dir:
+        records = _load_from_scan(root_dir, quick_load=quick_load)
     else:
         records = _load_from_db(root_dir, quick_load=quick_load)
 
@@ -383,7 +387,7 @@ def _load_from_db(root_dir, quick_load=False):
     query = {
         "filetype": "image",
         "removed": False,
-        "filefullpath": {"$regex": root_dir},
+        "filefullpath": {"$regex": f"^{re.escape(root_dir)}"},
     }
     cursor = db["files"].find(
         query, {"_id": 1, "filehash": 1, "filefullpath": 1}
@@ -391,10 +395,19 @@ def _load_from_db(root_dir, quick_load=False):
     docs = list(cursor)
     print(f"Total files from DB: {len(docs)}")
 
+    # Bulk-fetch all props in one query (eliminates N+1)
+    all_hashes = list({doc["filehash"] for doc in docs})
+    props_map = {}
+    if all_hashes:
+        for pdoc in db["filesLookup"].find({"_id": {"$in": all_hashes}}):
+            props_map[pdoc["_id"]] = pdoc
+    print(f"Fetched props for {len(props_map)} hashes in single query")
+
     records = []
     batch = []
     jsonl_path = os.path.join(root_dir, JSONL_FILE)
     extracted_count = 0
+    first_batch = True
 
     for doc in tqdm(docs, unit="img"):
         filehash = doc["filehash"]
@@ -402,7 +415,7 @@ def _load_from_db(root_dir, quick_load=False):
         if not os.path.isfile(filepath):
             continue
 
-        props = db["filesLookup"].find_one({"_id": filehash})
+        props = props_map.get(filehash)
         if props and props.get("props"):
             try:
                 rec = _build_record_from_props(filepath, filehash, props)
@@ -413,20 +426,63 @@ def _load_from_db(root_dir, quick_load=False):
             rec = _build_fallback_record(filepath, filehash, quick_load=quick_load)
             extracted_count += 1
             # Periodic memory cleanup during full extraction
-            if not quick_load and extracted_count % 10 == 0:
+            if not quick_load and extracted_count % 500 == 0:
                 gc.collect()
 
         batch.append(rec)
         if len(batch) >= 100:
-            write_jsonl(jsonl_path, batch)
+            write_jsonl(jsonl_path, batch, mode="w" if first_batch else "a")
+            first_batch = False
             records.extend(batch)
             batch.clear()
 
     if batch:
-        write_jsonl(jsonl_path, batch)
+        write_jsonl(jsonl_path, batch, mode="w" if first_batch else "a")
         records.extend(batch)
 
     return records
+
+
+IMAGE_EXTENSIONS = {
+    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".tif",
+    ".webp", ".heic", ".heif", ".avif", ".svg", ".ico",
+}
+
+
+def _load_from_scan(root_dir, quick_load=False):
+    """Recursively scan directory for image files (skip DB entirely)."""
+    already_seen = load_seen(root_dir)
+    records = []
+    batch = []
+    jsonl_path = os.path.join(root_dir, JSONL_FILE)
+    first_batch = True
+
+    all_files = []
+    for dirpath, _dirs, files in os.walk(root_dir):
+        for fname in files:
+            ext = os.path.splitext(fname)[1].lower()
+            if ext in IMAGE_EXTENSIONS:
+                all_files.append(os.path.join(dirpath, fname))
+
+    print(f"Directory scan found {len(all_files)} image files in {root_dir}")
+
+    for filepath in tqdm(all_files, unit="img", desc="Scanning"):
+        if filepath in already_seen:
+            continue
+        rec = _quick_extract_props(filepath)
+        batch.append(rec)
+        if len(batch) >= 100:
+            write_jsonl(jsonl_path, batch, mode="w" if first_batch else "a")
+            first_batch = False
+            records.extend(batch)
+            batch.clear()
+
+    if batch:
+        write_jsonl(jsonl_path, batch, mode="w" if first_batch else "a")
+        records.extend(batch)
+
+    return records
+
 
 @app.route('/')
 def index():
@@ -458,6 +514,7 @@ def load_images():
     sort_order = request.form.get('sort_order', 'asc') != 'asc'
     load_last = request.form.get("loadLast") == "true"
     quick_load = request.form.get("quickLoad") == "true"
+    scan_dir = request.form.get("scanDir") == "true"
     filter_by = request.form.get('filter_by', '-')
 
     if not directory or not os.path.isdir(directory):
@@ -468,11 +525,11 @@ def load_images():
     page = _state["page"]
 
     if _state["loaded_images_cache"] is None:
-        mode = "quick" if quick_load else "full"
+        mode = "scan" if scan_dir else ("quick" if quick_load else "full")
         print(f"First load — building image cache (mode={mode})...")
         _state["loaded_images_cache"] = get_images_from_directory(
             directory, sort_by, sort_order, load_last, filter_by,
-            quick_load=quick_load,
+            quick_load=quick_load, scan_dir=scan_dir,
         )
 
     start = (page - 1) * IMAGES_PER_PAGE
@@ -602,6 +659,64 @@ def extract_props():
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/bulk_action', methods=['POST'])
+def bulk_action():
+    """Process multiple images in a single request.
+
+    Expects JSON: { "paths": [...], "action": "keep"|"delete"|"move" }
+    Returns: { "success": true, "results": { "ok": N, "failed": N, "errors": [...] } }
+    """
+    data = request.get_json(silent=True) or {}
+    paths = data.get('paths', [])
+    action = data.get('action', '')
+    root = _state["root_dir"]
+
+    if not paths or action not in ('keep', 'delete', 'move'):
+        return jsonify({'success': False, 'error': 'Invalid params'}), 400
+
+    ok_count = 0
+    fail_count = 0
+    errors = []
+
+    for image_path in paths:
+        if not image_path or not os.path.isfile(image_path):
+            fail_count += 1
+            continue
+        if not _validate_path_under_root(image_path):
+            fail_count += 1
+            continue
+
+        try:
+            if action == 'delete':
+                seen_path = os.path.join(root, SEEN_FILE)
+                with open(seen_path, 'a') as f:
+                    f.write(image_path + "\n")
+                os.remove(image_path)
+            elif action == 'keep':
+                seen_path = os.path.join(root, SEEN_FILE)
+                with open(seen_path, 'a') as f:
+                    f.write(image_path + "\n")
+                target_dir = root + "_kept"
+                os.makedirs(target_dir, exist_ok=True)
+                shutil.move(image_path, os.path.join(target_dir, os.path.basename(image_path)))
+            elif action == 'move':
+                target_dir = root + "_moved"
+                os.makedirs(target_dir, exist_ok=True)
+                shutil.move(image_path, os.path.join(target_dir, os.path.basename(image_path)))
+                seen_path = os.path.join(root, SEEN_FILE)
+                with open(seen_path, 'a') as f:
+                    f.write(image_path + "\n")
+            ok_count += 1
+        except Exception as e:
+            fail_count += 1
+            errors.append(f"{os.path.basename(image_path)}: {e}")
+
+    return jsonify({
+        'success': True,
+        'results': {'ok': ok_count, 'failed': fail_count, 'errors': errors[:10]},
+    })
 
 
 @app.route('/reset_cache', methods=['POST'])

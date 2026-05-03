@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import uuid
 from typing import Any, Optional
@@ -183,7 +184,7 @@ def create_app() -> Flask:
 
         query = {
             "filetype": "video",
-            "filefullpath": {"$regex": directory},
+            "filefullpath": {"$regex": f"^{re.escape(directory)}"},
             "removed": False,
         }
         projection = {
@@ -229,6 +230,46 @@ def create_app() -> Flask:
                 props = None
 
             videos.append(_video_record(filepath, props, filesize, sort_by))
+
+        # Persist cache for future resume
+        try:
+            with open(
+                os.path.join(directory, "lastLoad.json"), "w", encoding="utf-8"
+            ) as fh:
+                json.dump(videos, fh, indent=2)
+        except OSError as exc:
+            logger.warning("Cache write failed: %s", exc)
+
+        return videos
+
+    VIDEO_EXTENSIONS: set[str] = {
+        ".mp4", ".mkv", ".avi", ".mov", ".flv", ".wmv", ".webm",
+        ".m4v", ".mpg", ".mpeg", ".3gp", ".ts", ".vob",
+    }
+
+    def _load_from_scan(
+        directory: str, ok_videos: set[str], sort_by: str
+    ) -> list[dict]:
+        """Recursively scan a directory for video files and build the video list."""
+        videos: list[dict] = []
+
+        for root, _dirs, files in os.walk(directory):
+            for fname in files:
+                ext = os.path.splitext(fname)[1].lower()
+                if ext not in VIDEO_EXTENSIONS:
+                    continue
+                filepath = os.path.join(root, fname)
+                if filepath in ok_videos:
+                    continue
+                try:
+                    filesize = os.path.getsize(filepath)
+                except OSError:
+                    continue
+                videos.append(
+                    _video_record(filepath, None, filesize, sort_by)
+                )
+
+        logger.info("Directory scan found %d videos in %s", len(videos), directory)
 
         # Persist cache for future resume
         try:
@@ -306,12 +347,15 @@ def create_app() -> Flask:
             sort_by = request.form.get("sort_by", "size")
             sort_order = request.form.get("sort_order", "asc")
             load_last = request.form.get("loadLast") == "on"
+            scan_dir = request.form.get("scanDir") == "on"
 
             session["sid"] = uuid.uuid4().hex
             session["directory"] = directory
             session["sort_by"] = sort_by
             session["sort_order"] = sort_order
             session["load_last"] = load_last
+            session["scan_dir"] = scan_dir
+            session["batch_size"] = int(request.form.get("batch_size", 2))
 
             return redirect(
                 url_for("videos", directory=directory, sort_by=sort_by)
@@ -323,6 +367,7 @@ def create_app() -> Flask:
         directory = request.args.get("directory", "").strip()
         sort_by = request.args.get("sort_by", "size")
         load_last = session.get("load_last", False)
+        scan_dir = session.get("scan_dir", False)
         descending = session.get("sort_order", "asc") != "asc"
 
         if not directory:
@@ -334,14 +379,17 @@ def create_app() -> Flask:
 
         if load_last:
             video_list = _load_from_cache(directory, ok_videos)
+        elif scan_dir:
+            video_list = _load_from_scan(directory, ok_videos, sort_by)
         else:
             video_list = _load_from_db(directory, ok_videos, sort_by)
 
         video_list = _sort_videos(video_list, sort_by, descending)
 
         total_count = len(video_list)
-        initial = video_list[:INITIAL_BATCH_SIZE]
-        remaining = video_list[INITIAL_BATCH_SIZE:]
+        batch_size = session.get("batch_size", INITIAL_BATCH_SIZE)
+        initial = video_list[:batch_size]
+        remaining = video_list[batch_size:]
 
         sid = session.get("sid") or uuid.uuid4().hex
         session["sid"] = sid

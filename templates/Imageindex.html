@@ -170,6 +170,10 @@
                     <input class="form-check-input" type="checkbox" id="quickLoad">
                     <label class="form-check-label" for="quickLoad">Quick</label>
                 </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" id="scanDir">
+                    <label class="form-check-label" for="scanDir">Scan Dir</label>
+                </div>
             </div>
             <div class="col-md-2 d-flex gap-2">
                 <button type="submit" class="btn btn-primary btn-sm flex-fill">
@@ -320,6 +324,14 @@
         byId('grid-label').textContent = this.value + ' col';
     });
 
+    /* ── Mutual exclusivity: Load Last ↔ Scan Dir ── */
+    byId('loadLast').addEventListener('change', function() {
+        if (this.checked) byId('scanDir').checked = false;
+    });
+    byId('scanDir').addEventListener('change', function() {
+        if (this.checked) byId('loadLast').checked = false;
+    });
+
     /* ══════════════════════════════════════════
        LOAD IMAGES
        ══════════════════════════════════════════ */
@@ -330,13 +342,15 @@
         var order  = qsel('input[name="sort_order"]:checked').value;
         var loadLast = byId('loadLast').checked;
         var quick    = byId('quickLoad').checked;
+        var scanDir  = byId('scanDir').checked;
 
         if (!dir) { toast('Enter a directory path', 'error'); return; }
         showLoading();
 
         var body = new URLSearchParams({
             directory_path: dir, page: page, sort_by: sortBy,
-            sort_order: order, loadLast: loadLast, quickLoad: quick, filter_by: filterBy
+            sort_order: order, loadLast: loadLast, quickLoad: quick,
+            scanDir: scanDir, filter_by: filterBy
         });
 
         fetch('/load_images', {
@@ -518,45 +532,46 @@
     }
 
     /* ── Bulk actions ── */
-    function bulkAction(endpoint, actionName) {
+    function bulkAction(action, actionName) {
         if (selectedSet.size === 0) return;
-        var count = selectedSet.size;
-
-
         var paths = Array.from(selectedSet);
-        var done = 0;
         showLoading();
 
-        paths.forEach(function(path) {
-            fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({ image_name: path })
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                done++;
-                if (data.success) {
+        fetch('/bulk_action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paths: paths, action: action })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            hideLoading();
+            if (data.success) {
+                var res = data.results;
+                // Remove cards for successfully processed images
+                paths.forEach(function(path) {
                     var w = qsel('.image-wrapper[data-path="' + CSS.escape(path) + '"]');
                     if (w) w.remove();
                     selectedSet.delete(path);
+                });
+                toast(actionName + ' ' + res.ok + ' images' + (res.failed ? ' (' + res.failed + ' failed)' : ''), 'success');
+                if (res.errors && res.errors.length) {
+                    res.errors.forEach(function(e) { toast(e, 'error'); });
                 }
-                if (done === paths.length) {
-                    hideLoading();
-                    toast(actionName + ' ' + done + ' images', 'success');
-                    updateStats();
-                }
-            })
-            .catch(function() {
-                done++;
-                if (done === paths.length) { hideLoading(); updateStats(); }
-            });
+            } else {
+                toast('Bulk action failed: ' + (data.error || ''), 'error');
+            }
+            updateStats();
+        })
+        .catch(function(err) {
+            hideLoading();
+            toast('Network error: ' + err.message, 'error');
+            updateStats();
         });
     }
 
-    byId('bulk-keep').addEventListener('click',     function() { bulkAction('/keep_image', 'Kept'); });
-    byId('bulk-delete').addEventListener('click',   function() { bulkAction('/delete_image', 'Deleted'); });
-    byId('bulk-move').addEventListener('click',     function() { bulkAction('/move_image', 'Moved'); });
+    byId('bulk-keep').addEventListener('click',     function() { bulkAction('keep', 'Kept'); });
+    byId('bulk-delete').addEventListener('click',   function() { bulkAction('delete', 'Deleted'); });
+    byId('bulk-move').addEventListener('click',     function() { bulkAction('move', 'Moved'); });
     byId('bulk-deselect').addEventListener('click', deselectAll);
 
     /* ── Select All checkbox ── */
